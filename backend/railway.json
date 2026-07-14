@@ -1,0 +1,18 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "nixpacksPlan": {
+      "phases": {
+        "install": {
+          "pkgs": ["python3", "gcc", "g++", "make"]
+        }
+      }
+    }
+  },
+  "deploy": {
+    "startCommand": "node server.js",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
+  }
+}

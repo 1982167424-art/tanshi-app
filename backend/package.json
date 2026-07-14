@@ -1,0 +1,17 @@
+{
+  "name": "tanshi-backend",
+  "version": "1.0.0",
+  "description": "探时后端服务 - 用户数据管理",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "cors": "^2.8.5",
+    "crypto-js": "^4.2.0",
+    "dotenv": "^17.4.2",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.3"
+  }
+}
