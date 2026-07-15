@@ -30,11 +30,10 @@ const config = {
     path: process.env.DB_PATH || './data/tanshi.db',
   },
 
-  // MiMo AI 服务配置
-  mimo: {
-    apiUrl: process.env.MIMO_API_URL || 'https://api.xiaomimimo.com/v1/chat/completions',
-    apiKey: process.env.MIMO_API_KEY || '',
-    model: process.env.MIMO_MODEL || 'mimo-v2.5',
+  // AI 服务配置（使用 Pollinations.ai 免费服务，无需 API Key）
+  ai: {
+    apiUrl: 'https://text.pollinations.ai/openai',
+    model: 'openai',
   },
 };
 

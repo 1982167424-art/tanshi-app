@@ -1,17 +1,15 @@
-const MIMO_API_URL = process.env.MIMO_API_URL || 'https://api.xiaomimimo.com/v1/chat/completions';
-const MIMO_API_KEY = process.env.MIMO_API_KEY || 'sk-chpw3yyqtql6izsrpfyl8e0n8l0esw2ynn4vduxp43nab6n5';
-const MIMO_MODEL = process.env.MIMO_MODEL || 'mimo-v2.5';
+const POLLINATIONS_API_URL = 'https://text.pollinations.ai/openai';
+const POLLINATIONS_MODEL = 'openai';
 
-// 调用 Mimo API
+// 调用 Pollinations AI（免费，无需 API Key）
 const callMimo = async (systemPrompt, userPrompt, { temperature = 0.8, maxTokens = 200 } = {}) => {
-  const response = await fetch(MIMO_API_URL, {
+  const response = await fetch(POLLINATIONS_API_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${MIMO_API_KEY}`,
     },
     body: JSON.stringify({
-      model: MIMO_MODEL,
+      model: POLLINATIONS_MODEL,
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
