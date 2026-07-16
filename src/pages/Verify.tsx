@@ -10,7 +10,7 @@ const Verify: React.FC = () => {
   const widgetIdRef = useRef<string>('');
   const [status, setStatus] = useState<'loading' | 'verifying' | 'success' | 'error'>('loading');
   const [loadFailed, setLoadFailed] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
+  const [scriptReady, setScriptReady] = useState(false);
   const [rayId] = useState(() => {
     const chars = '0123456789abcdef';
     let id = '';
@@ -24,48 +24,63 @@ const Verify: React.FC = () => {
     navigate(from, { replace: true });
   }, [navigate, from]);
 
-  const initTurnstile = useCallback(async () => {
-    setStatus('loading');
-    setLoadFailed(false);
-    const success = await loadTurnstile();
-    if (!success) {
-      setLoadFailed(true);
-      return;
-    }
-
-    if (turnstileRef.current) {
-      setStatus('verifying');
-      widgetIdRef.current = window.turnstile!.render(turnstileRef.current, {
-        sitekey: import.meta.env.VITE_TURNSTILE_SITE_KEY || '0x4AAAAAAD1vYyHUN3U7Rkdz',
-        callback: () => {
-          setStatus('success');
-          sessionStorage.setItem('turnstile_verified', 'true');
-          setTimeout(() => navigate(from, { replace: true }), 500);
-        },
-        errorCallback: () => setStatus('error'),
-        theme: getTurnstileTheme(),
-      });
-    }
-  }, [navigate, from]);
-
+  // 第一步：加载脚本
   useEffect(() => {
-    initTurnstile();
+    const loadScript = async () => {
+      const success = await loadTurnstile();
+      if (success) {
+        setScriptReady(true);
+      } else {
+        setLoadFailed(true);
+      }
+    };
+    loadScript();
+  }, []);
 
+  // 第二步：脚本就绪后渲染 widget（此时 DOM 中容器 div 已存在）
+  useEffect(() => {
+    if (!scriptReady || !turnstileRef.current || widgetIdRef.current) return;
+    if (!window.turnstile) return;
+
+    setStatus('verifying');
+    widgetIdRef.current = window.turnstile.render(turnstileRef.current, {
+      sitekey: import.meta.env.VITE_TURNSTILE_SITE_KEY || '0x4AAAAAAD1vYyHUN3U7Rkdz',
+      callback: () => {
+        setStatus('success');
+        sessionStorage.setItem('turnstile_verified', 'true');
+        setTimeout(() => navigate(from, { replace: true }), 500);
+      },
+      errorCallback: () => setStatus('error'),
+      theme: getTurnstileTheme(),
+    });
+  }, [scriptReady, navigate, from]);
+
+  // 重试
+  const handleRetry = useCallback(() => {
+    widgetIdRef.current = '';
+    setScriptReady(false);
+    setLoadFailed(false);
+    setStatus('loading');
+    loadTurnstile().then(success => {
+      if (success) {
+        setScriptReady(true);
+      } else {
+        setLoadFailed(true);
+      }
+    });
+  }, []);
+
+  // 失败后显示跳过按钮
+  const showSkip = loadFailed;
+
+  // 清理
+  useEffect(() => {
     return () => {
       if (widgetIdRef.current && window.turnstile) {
         window.turnstile.reset(widgetIdRef.current);
       }
     };
-  }, [initTurnstile]);
-
-  // 重试逻辑
-  const handleRetry = useCallback(() => {
-    setRetryCount(prev => prev + 1);
-    initTurnstile();
-  }, [initTurnstile]);
-
-  // 重试 3 次后显示跳过按钮
-  const showSkip = retryCount >= 3 || loadFailed;
+  }, []);
 
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900 flex flex-col">
@@ -83,11 +98,19 @@ const Verify: React.FC = () => {
             本网站使用安全服务防护恶意自动程序。在验证您不是自动程序期间，将显示此页面。
           </p>
 
-          {status === 'loading' && (
-            <div className="flex justify-center items-center py-6">
-              <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-            </div>
-          )}
+          {/* 容器始终存在，用 CSS 控制显隐 */}
+          <div className="mb-4">
+            {status === 'loading' && (
+              <div className="flex justify-center items-center py-6">
+                <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+            {/* Turnstile 容器：始终在 DOM 中，加载中时隐藏 */}
+            <div
+              ref={turnstileRef}
+              style={{ display: status === 'loading' ? 'none' : 'block' }}
+            />
+          </div>
 
           {loadFailed && (
             <div className="flex flex-col items-center gap-3 py-6">
@@ -106,12 +129,6 @@ const Verify: React.FC = () => {
                   跳过验证
                 </button>
               )}
-            </div>
-          )}
-
-          {!loadFailed && status !== 'loading' && (
-            <div className="mb-4">
-              <div ref={turnstileRef} />
             </div>
           )}
 
