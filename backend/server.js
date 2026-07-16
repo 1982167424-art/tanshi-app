@@ -25,6 +25,21 @@ app.get('/api/health', (req, res) => {
   res.json({ success: true, message: '探时后端服务运行正常', data: { status: 'ok' } });
 });
 
+// ============ Turnstile 脚本代理（解决国内无法直接访问 Cloudflare CDN） ============
+app.get('/api/turnstile/script', async (req, res) => {
+  try {
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/api.js');
+    if (!response.ok) throw new Error(`Cloudflare 返回 ${response.status}`);
+    const script = await response.text();
+    res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(script);
+  } catch (error) {
+    console.error('Turnstile 脚本代理失败:', error.message);
+    res.status(502).send('// Turnstile script proxy failed');
+  }
+});
+
 // ============ 业务路由 ============
 app.use('/api', routes);
 

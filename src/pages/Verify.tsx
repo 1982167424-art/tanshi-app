@@ -37,6 +37,16 @@ const Verify: React.FC = () => {
     loadScript();
   }, []);
 
+  // 加载失败后 3 秒自动跳过验证（降级方案）
+  useEffect(() => {
+    if (!loadFailed) return;
+    const timer = setTimeout(() => {
+      sessionStorage.setItem('turnstile_verified', 'true');
+      navigate(from, { replace: true });
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [loadFailed, navigate, from]);
+
   // 第二步：脚本就绪后渲染 widget（此时 DOM 中容器 div 已存在）
   useEffect(() => {
     if (!scriptReady || !turnstileRef.current || widgetIdRef.current) return;
@@ -69,9 +79,6 @@ const Verify: React.FC = () => {
       }
     });
   }, []);
-
-  // 失败后显示跳过按钮
-  const showSkip = loadFailed;
 
   // 清理
   useEffect(() => {
@@ -115,20 +122,21 @@ const Verify: React.FC = () => {
           {loadFailed && (
             <div className="flex flex-col items-center gap-3 py-6">
               <p className="text-amber-600 dark:text-amber-400 font-serif">验证组件加载失败</p>
-              <button
-                onClick={handleRetry}
-                className="text-amber-500 hover:text-amber-600 font-serif text-sm underline dark:text-amber-400"
-              >
-                点击重试
-              </button>
-              {showSkip && (
+              <p className="text-gray-500 dark:text-gray-400 text-xs">3 秒后将自动跳过验证...</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleRetry}
+                  className="text-amber-500 hover:text-amber-600 font-serif text-sm underline dark:text-amber-400"
+                >
+                  点击重试
+                </button>
                 <button
                   onClick={skipVerification}
-                  className="text-gray-500 hover:text-gray-600 font-serif text-xs underline dark:text-gray-400 mt-2"
+                  className="text-gray-500 hover:text-gray-600 font-serif text-sm underline dark:text-gray-400"
                 >
-                  跳过验证
+                  立即跳过
                 </button>
-              )}
+              </div>
             </div>
           )}
 

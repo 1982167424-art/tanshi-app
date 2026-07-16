@@ -20,13 +20,16 @@ declare global {
   }
 }
 
-// Turnstile 只能从 Cloudflare 官方 CDN 加载
-// npm 包是服务端验证用的，不包含客户端脚本
-const CDN_URLS = [
-  'https://challenges.cloudflare.com/turnstile/v0/api.js',
-];
+// CDN 列表：主CDN（Cloudflare 官方）→ 后端代理（解决国内访问）→ 备用CDN
+const getCDNUrls = (): string[] => {
+  const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
+  return [
+    'https://challenges.cloudflare.com/turnstile/v0/api.js',
+    `${apiBase}/api/turnstile/script`,
+  ];
+};
 
-const SCRIPT_TIMEOUT_MS = 15000;
+const SCRIPT_TIMEOUT_MS = 8000;
 
 /**
  * 加载单个脚本文件
@@ -76,7 +79,8 @@ const loadScript = (url: string): Promise<void> => {
 export const loadTurnstile = async (): Promise<boolean> => {
   if (window.turnstile) return true;
 
-  for (const url of CDN_URLS) {
+  const urls = getCDNUrls();
+  for (const url of urls) {
     try {
       await loadScript(url);
       if (window.turnstile) return true;
