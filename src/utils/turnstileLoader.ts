@@ -20,13 +20,14 @@ declare global {
   }
 }
 
-// CDN 列表：主CDN（Cloudflare 官方）+ 备用CDN（jsDelivr）
+// CDN 列表：主CDN（Cloudflare 官方）+ 备用CDN（unpkg）
+// 注意：jsDelivr 在国内也被墙，改用 unpkg
 const CDN_URLS = [
   'https://challenges.cloudflare.com/turnstile/v0/api.js',
-  'https://cdn.jsdelivr.net/npm/@cloudflare/turnstile@0.6.4/dist/turnstile.min.js',
+  'https://unpkg.com/@cloudflare/turnstile@0.6.4/dist/turnstile.js',
 ];
 
-const SCRIPT_TIMEOUT_MS = 10000;
+const SCRIPT_TIMEOUT_MS = 15000;
 
 /**
  * 加载单个脚本文件

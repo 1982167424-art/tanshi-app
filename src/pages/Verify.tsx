@@ -10,12 +10,19 @@ const Verify: React.FC = () => {
   const widgetIdRef = useRef<string>('');
   const [status, setStatus] = useState<'loading' | 'verifying' | 'success' | 'error'>('loading');
   const [loadFailed, setLoadFailed] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [rayId] = useState(() => {
     const chars = '0123456789abcdef';
     let id = '';
     for (let i = 0; i < 16; i++) id += chars[Math.floor(Math.random() * 16)];
     return id;
   });
+
+  // 跳过验证（降级方案）
+  const skipVerification = useCallback(() => {
+    sessionStorage.setItem('turnstile_verified', 'true');
+    navigate(from, { replace: true });
+  }, [navigate, from]);
 
   const initTurnstile = useCallback(async () => {
     setStatus('loading');
@@ -51,6 +58,15 @@ const Verify: React.FC = () => {
     };
   }, [initTurnstile]);
 
+  // 重试逻辑
+  const handleRetry = useCallback(() => {
+    setRetryCount(prev => prev + 1);
+    initTurnstile();
+  }, [initTurnstile]);
+
+  // 重试 3 次后显示跳过按钮
+  const showSkip = retryCount >= 3 || loadFailed;
+
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900 flex flex-col">
       <div className="flex-1 flex flex-col items-center justify-center px-6">
@@ -77,11 +93,19 @@ const Verify: React.FC = () => {
             <div className="flex flex-col items-center gap-3 py-6">
               <p className="text-amber-600 dark:text-amber-400 font-serif">验证组件加载失败</p>
               <button
-                onClick={initTurnstile}
+                onClick={handleRetry}
                 className="text-amber-500 hover:text-amber-600 font-serif text-sm underline dark:text-amber-400"
               >
                 点击重试
               </button>
+              {showSkip && (
+                <button
+                  onClick={skipVerification}
+                  className="text-gray-500 hover:text-gray-600 font-serif text-xs underline dark:text-gray-400 mt-2"
+                >
+                  跳过验证
+                </button>
+              )}
             </div>
           )}
 

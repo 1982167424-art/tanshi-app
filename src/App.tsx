@@ -65,7 +65,8 @@ const App: React.FC = () => {
     const token = localStorage.getItem('tanshi_token');
     if (token && currentUser) {
       // 验证token是否仍然有效，并同步最新用户信息
-      fetch('http://localhost:3001/api/days', {
+      const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
+      fetch(`${apiBase}/api/days`, {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
