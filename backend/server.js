@@ -235,6 +235,36 @@ const server = app.listen(PORT, () => {
   console.log(`   DELETE /api/admin/users/:uid      - 管理删除用户(需Admin-Key)`);
 });
 
+// ============ 定时清理回收站（每天凌晨3点） ============
+const TRASH_EXPIRE_DAYS = 30;
+const purgeExpiredTrash = () => {
+  try {
+    const threshold = new Date(Date.now() - TRASH_EXPIRE_DAYS * 24 * 60 * 60 * 1000).toISOString();
+    const result = db.prepare('DELETE FROM trash WHERE deleted_at < ?').run(threshold);
+    if (result.changes > 0) {
+      console.log(`🗑️ 回收站清理: 删除了 ${result.changes} 条过期记录`);
+    }
+  } catch (err) {
+    console.error('回收站清理失败:', err.message);
+  }
+};
+
+// 计算距离下一个凌晨3点的毫秒数
+const getMsUntil3AM = () => {
+  const now = new Date();
+  const next = new Date(now);
+  next.setHours(3, 0, 0, 0);
+  if (next <= now) next.setDate(next.getDate() + 1);
+  return next - now;
+};
+
+// 首次延迟到凌晨3点执行，之后每24小时执行一次
+setTimeout(() => {
+  purgeExpiredTrash();
+  setInterval(purgeExpiredTrash, 24 * 60 * 60 * 1000);
+}, getMsUntil3AM());
+console.log(`⏰ 回收站定时清理已启用: 每天凌晨3点自动清理${TRASH_EXPIRE_DAYS}天前的过期数据`);
+
 // ============ 优雅关闭 ============
 function gracefulShutdown(signal) {
   console.log(`\n${signal} 收到，正在关闭服务...`);

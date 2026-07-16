@@ -2,6 +2,7 @@ const POLLINATIONS_API_URL = 'https://text.pollinations.ai/openai';
 const POLLINATIONS_MODEL = 'openai';
 
 // 调用 Pollinations AI（免费，无需 API Key）
+// 模型：gpt-oss-20b（OpenAI 开源模型，支持推理）
 const callMimo = async (systemPrompt, userPrompt, { temperature = 0.8, maxTokens = 200 } = {}) => {
   const response = await fetch(POLLINATIONS_API_URL, {
     method: 'POST',
