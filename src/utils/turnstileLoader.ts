@@ -20,14 +20,11 @@ declare global {
   }
 }
 
-// CDN 列表：主CDN（Cloudflare 官方）→ 后端代理（解决国内访问）→ 备用CDN
-const getCDNUrls = (): string[] => {
-  const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
-  return [
-    'https://challenges.cloudflare.com/turnstile/v0/api.js',
-    `${apiBase}/api/turnstile/script`,
-  ];
-};
+// CDN 列表：Cloudflare 官方 → Vercel API 代理（通过后端代理获取脚本）
+const CDN_URLS = [
+  'https://challenges.cloudflare.com/turnstile/v0/api.js',
+  '/api/turnstile/script',  // 通过 Vercel 代理转发到后端，后端再代理 Cloudflare
+];
 
 const SCRIPT_TIMEOUT_MS = 8000;
 
@@ -79,8 +76,7 @@ const loadScript = (url: string): Promise<void> => {
 export const loadTurnstile = async (): Promise<boolean> => {
   if (window.turnstile) return true;
 
-  const urls = getCDNUrls();
-  for (const url of urls) {
+  for (const url of CDN_URLS) {
     try {
       await loadScript(url);
       if (window.turnstile) return true;

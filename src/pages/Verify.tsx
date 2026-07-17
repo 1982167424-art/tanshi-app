@@ -18,12 +18,6 @@ const Verify: React.FC = () => {
     return id;
   });
 
-  // 跳过验证（降级方案）
-  const skipVerification = useCallback(() => {
-    sessionStorage.setItem('turnstile_verified', 'true');
-    navigate(from, { replace: true });
-  }, [navigate, from]);
-
   // 第一步：加载脚本
   useEffect(() => {
     const loadScript = async () => {
@@ -37,16 +31,6 @@ const Verify: React.FC = () => {
     loadScript();
   }, []);
 
-  // 加载失败后 3 秒自动跳过验证（降级方案）
-  useEffect(() => {
-    if (!loadFailed) return;
-    const timer = setTimeout(() => {
-      sessionStorage.setItem('turnstile_verified', 'true');
-      navigate(from, { replace: true });
-    }, 3000);
-    return () => clearTimeout(timer);
-  }, [loadFailed, navigate, from]);
-
   // 第二步：脚本就绪后渲染 widget（此时 DOM 中容器 div 已存在）
   useEffect(() => {
     if (!scriptReady || !turnstileRef.current || widgetIdRef.current) return;
@@ -55,9 +39,10 @@ const Verify: React.FC = () => {
     setStatus('verifying');
     widgetIdRef.current = window.turnstile.render(turnstileRef.current, {
       sitekey: import.meta.env.VITE_TURNSTILE_SITE_KEY || '0x4AAAAAAD1vYyHUN3U7Rkdz',
-      callback: () => {
+      callback: (token: string) => {
         setStatus('success');
         sessionStorage.setItem('turnstile_verified', 'true');
+        sessionStorage.setItem('turnstile_token', token);
         setTimeout(() => navigate(from, { replace: true }), 500);
       },
       errorCallback: () => setStatus('error'),
@@ -122,21 +107,13 @@ const Verify: React.FC = () => {
           {loadFailed && (
             <div className="flex flex-col items-center gap-3 py-6">
               <p className="text-amber-600 dark:text-amber-400 font-serif">验证组件加载失败</p>
-              <p className="text-gray-500 dark:text-gray-400 text-xs">3 秒后将自动跳过验证...</p>
-              <div className="flex gap-3">
-                <button
-                  onClick={handleRetry}
-                  className="text-amber-500 hover:text-amber-600 font-serif text-sm underline dark:text-amber-400"
-                >
-                  点击重试
-                </button>
-                <button
-                  onClick={skipVerification}
-                  className="text-gray-500 hover:text-gray-600 font-serif text-sm underline dark:text-gray-400"
-                >
-                  立即跳过
-                </button>
-              </div>
+              <p className="text-gray-500 dark:text-gray-400 text-xs">请检查网络连接后刷新页面重试</p>
+              <button
+                onClick={handleRetry}
+                className="text-amber-500 hover:text-amber-600 font-serif text-sm underline dark:text-amber-400"
+              >
+                点击重试
+              </button>
             </div>
           )}
 

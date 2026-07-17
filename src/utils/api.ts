@@ -1,6 +1,7 @@
 import { Day, Note, Habit, Mood, Reminder, DeletedItem, User } from '@/types';
 
-const API_BASE = (import.meta.env.VITE_API_BASE || 'https://tanshi-backend-api-production.up.railway.app') + '/api';
+// 使用相对路径，通过 Vercel 代理转发到后端，隐藏原站域名
+const API_BASE = (import.meta.env.VITE_API_BASE || '') + '/api';
 
 // Token管理
 const TOKEN_KEY = 'tanshi_token';
@@ -8,12 +9,23 @@ const getToken = () => localStorage.getItem(TOKEN_KEY);
 const setToken = (token: string) => localStorage.setItem(TOKEN_KEY, token);
 const removeToken = () => localStorage.removeItem(TOKEN_KEY);
 
+// 请求超时控制
+const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs = 15000): Promise<Response> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
 // 请求封装：自动注入JWT，统一解包 data 字段
 async function request<T = unknown>(url: string, options?: RequestInit): Promise<T> {
   const token = getToken();
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}${url}`, {
+    res = await fetchWithTimeout(`${API_BASE}${url}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
@@ -22,8 +34,11 @@ async function request<T = unknown>(url: string, options?: RequestInit): Promise
       },
     });
   } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('请求超时，请检查网络后重试');
+    }
     console.error(`API请求失败 [${url}]:`, error);
-    throw error;
+    throw new Error('网络连接失败，请检查网络后重试');
   }
 
   let body: { success: boolean; message: string; data: T };
@@ -31,7 +46,7 @@ async function request<T = unknown>(url: string, options?: RequestInit): Promise
     body = await res.json();
   } catch (error) {
     console.error(`API响应解析失败 [${url}]:`, error);
-    throw new Error('服务器响应格式错误');
+    throw new Error('服务器响应异常，请稍后重试');
   }
 
   if (!res.ok || !body.success) {

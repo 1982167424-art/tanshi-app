@@ -73,9 +73,11 @@ const Register: React.FC = () => {
     setShowAgeModal(false);
 
     try {
-      const result = await register(username, password, birthday);
+      const turnstileToken = sessionStorage.getItem('turnstile_token') || undefined;
+      const result = await register(username, password, birthday, turnstileToken);
       if (result.success && result.accessCode) {
         setGeneratedAccessCode(result.accessCode);
+        sessionStorage.removeItem('turnstile_token');
         setShowAccessCodeModal(true);
       } else {
         setError(result.message);

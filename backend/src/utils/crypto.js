@@ -1,24 +1,15 @@
-const CryptoJS = require('crypto-js');
-const config = require('../config');
+const bcrypt = require('bcrypt');
 
-// AES 加密密码
-const encryptPassword = (password) => {
-  return CryptoJS.AES.encrypt(password, config.aesSecret).toString();
-};
+const BCRYPT_ROUNDS = 10;
 
-// AES 解密密码
-const decryptPassword = (encrypted) => {
-  try {
-    const bytes = CryptoJS.AES.decrypt(encrypted, config.aesSecret);
-    return bytes.toString(CryptoJS.enc.Utf8);
-  } catch {
-    return '';
-  }
+// 加密密码（bcrypt 单向哈希）
+const encryptPassword = async (password) => {
+  return bcrypt.hash(password, BCRYPT_ROUNDS);
 };
 
 // 验证密码
-const verifyPassword = (inputPassword, storedPassword) => {
-  return inputPassword === decryptPassword(storedPassword);
+const verifyPassword = async (inputPassword, storedPassword) => {
+  return bcrypt.compare(inputPassword, storedPassword);
 };
 
 // 校验密码格式：至少8位，包含字母、数字、符号
@@ -59,7 +50,6 @@ const generateAccessCode = () => {
 
 module.exports = {
   encryptPassword,
-  decryptPassword,
   verifyPassword,
   validatePassword,
   generateUid,

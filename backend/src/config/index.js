@@ -10,9 +10,6 @@ const config = {
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
 
-  // AES 加密密钥
-  aesSecret: process.env.AES_SECRET || 'tanshi_secure_key_2024!@#',
-
   // 管理后台密钥
   adminKey: process.env.ADMIN_KEY || 'tanshi_admin_2024',
 

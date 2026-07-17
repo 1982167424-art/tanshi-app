@@ -64,9 +64,8 @@ const App: React.FC = () => {
 
     const token = localStorage.getItem('tanshi_token');
     if (token && currentUser) {
-      // 验证token是否仍然有效，并同步最新用户信息
-      const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
-      fetch(`${apiBase}/api/days`, {
+      // 验证token是否仍然有效（使用相对路径，通过 Vercel 代理）
+      fetch('/api/days', {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
@@ -173,14 +172,8 @@ const App: React.FC = () => {
     <Router>
       <Routes>
         <Route path="/verify" element={<Verify />} />
-        <Route 
-          path="/login" 
-          element={<AuthRoute><Login /></AuthRoute>} 
-        />
-        <Route 
-          path="/register" 
-          element={<AuthRoute><Register /></AuthRoute>} 
-        />
+        <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
+        <Route path="/register" element={<AuthRoute><Register /></AuthRoute>} />
         
         <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
           <Route index element={<Home />} />

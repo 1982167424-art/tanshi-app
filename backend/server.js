@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const config = require('./src/config');
 
 // 初始化数据库
@@ -10,14 +12,97 @@ require('./src/models/init').initDatabase();
 const routes = require('./src/routes');
 const logger = require('./src/middleware/logger');
 const errorHandler = require('./src/middleware/errorHandler');
+const { checkHeaders, jsonDepthLimit, paramCountLimit, requestTimeout, bodySizeLimit } = require('./src/middleware/security');
 const db = require('./src/models/database');
 
 const app = express();
 const PORT = config.port;
 
-// ============ 全局中间件 ============
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+// ============ 安全响应头 ============
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
+app.disable('x-powered-by');
+
+// ============ 请求超时（慢速攻击防护，10秒）============
+app.use(requestTimeout(10000));
+
+// ============ 速率限制（收紧阈值）============
+// 全局限制：每IP每分钟30次
+const limiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { success: false, message: '请求过于频繁，请稍后再试' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use('/api', limiter);
+
+// 认证接口严格限制（防暴力破解）：每IP每15分钟3次
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 3,
+  message: { success: false, message: '登录/注册请求过于频繁，请15分钟后再试' },
+  skipSuccessfulRequests: true,
+});
+app.use('/api/auth', authLimiter);
+
+// AI 接口限制：每IP每分钟5次
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  message: { success: false, message: 'AI请求过于频繁，请稍后再试' },
+});
+app.use('/api/ai', aiLimiter);
+
+// 敏感操作限制：每IP每小时3次
+const sensitiveLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  message: { success: false, message: '操作过于频繁，请1小时后再试' },
+});
+app.use('/api/users', sensitiveLimiter);
+
+// ============ CORS 配置（统一逻辑）============
+const ALLOWED_ORIGINS = [
+  'https://textime.top',
+  'https://exteenfit.vercel.app',
+];
+app.use(cors({
+  origin: (origin, callback) => {
+    // 无 origin（同域请求/Postman/curl）或在白名单内 → 放行
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      // 不在白名单 → 拒绝，不抛错（避免泄露内部信息）
+      callback(null, false);
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
+// ============ JSON 解析（限制大小 + 错误处理）============
+app.use(express.json({
+  limit: '100kb',
+  verify: (req, res, buf) => {
+    try {
+      JSON.parse(buf);
+    } catch {
+      res.status(400).json({ success: false, message: '请求格式错误' });
+      throw new Error('Invalid JSON');
+    }
+  },
+}));
+
+// ============ 安全中间件（请求头检查 + JSON深度 + 参数数量 + 请求体大小）============
+app.use(checkHeaders);
+app.use(bodySizeLimit(100 * 1024));
+app.use(jsonDepthLimit);
+app.use(paramCountLimit);
+
 app.use(logger);
 
 // ============ 健康检查 ============
@@ -217,8 +302,12 @@ async function deleteUser(uid){
 </html>`);
 });
 
-// ============ 404 ============
+// ============ 404 / 405 处理 ============
 app.use((req, res) => {
+  // 如果是 API 路径，返回 405 提示方法不允许
+  if (req.path.startsWith('/api/')) {
+    return res.status(405).json({ success: false, message: '请求方法不允许' });
+  }
   res.status(404).json({ success: false, message: '接口不存在' });
 });
 

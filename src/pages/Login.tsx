@@ -26,8 +26,10 @@ const Login: React.FC = () => {
     setLoading(true);
 
     try {
-      const result = await login(username, password, accessCode.trim() || undefined);
+      const turnstileToken = sessionStorage.getItem('turnstile_token') || undefined;
+      const result = await login(username, password, accessCode.trim() || undefined, turnstileToken);
       if (result.success) {
+        sessionStorage.removeItem('turnstile_token');
         navigate('/');
       } else {
         setError(result.message);
