@@ -6,15 +6,7 @@
 declare global {
   interface Window {
     turnstile?: {
-      render: (
-        container: string | HTMLElement,
-        options: {
-          sitekey: string;
-          callback: (token: string) => void;
-          errorCallback?: () => void;
-          theme?: 'light' | 'dark';
-        }
-      ) => string;
+      render: (container: string | HTMLElement, options: Record<string, unknown>) => string;
       reset: (widgetId: string) => void;
     };
   }

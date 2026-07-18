@@ -57,34 +57,19 @@ const App: React.FC = () => {
   const loadedUserRef = useRef<string | null>(null);
   const tokenCheckedRef = useRef(false);
 
-  // 启动时验证token有效性，并从后端同步最新用户信息
+  // 启动时验证token有效性
   useEffect(() => {
     if (tokenCheckedRef.current) return;
     tokenCheckedRef.current = true;
 
-    const token = localStorage.getItem('tanshi_token');
+    const token = sessionStorage.getItem('tanshi_token');
     if (token && currentUser) {
-      // 验证token是否仍然有效（使用相对路径，通过 Vercel 代理）
       fetch('/api/days', {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       }).then(res => {
-        if (res.status === 401) {
-          // Token无效，清除本地数据
-          console.log('Token已失效，自动退出登录');
-          logout();
-        } else {
-          // Token有效，从后端同步最新用户信息
-          syncUser();
-        }
-      }).catch(() => {
-        // 后端不可达，保持本地登录状态
-        console.log('后端不可达，保持本地登录');
-      });
+        if (res.status === 401) { logout(); } else { syncUser(); }
+      }).catch(() => {});
     } else if (currentUser && !token) {
-      // 有用户但无token（旧localStorage数据），自动退出
       logout();
     }
   }, [currentUser, logout, syncUser]);

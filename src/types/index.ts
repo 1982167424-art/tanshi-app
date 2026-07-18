@@ -99,3 +99,41 @@ export interface DeletedItem {
   data: Day | Note | Habit;
   deletedAt: string;
 }
+
+// 签到与成长体系
+export interface CheckinStatus {
+  checked_in_today: boolean;
+  streak_days: number;
+  total_points: number;
+  total_checkin_days: number;
+  last_checkin_date: string | null;
+  days_since_last_checkin: number;
+  break_warning: boolean;
+  break_message: string;
+}
+
+export interface CheckinResult {
+  points_earned: number;
+  total_points: number;
+  streak_days: number;
+  total_checkin_days: number;
+  new_titles: NewTitle[];
+  points_deducted: number;
+  auto_renewed: boolean;
+  previous_streak?: number;
+}
+
+export interface NewTitle {
+  code: string;
+  name: string;
+  type: string;
+}
+
+export interface UserTitle {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  is_permanent: boolean;
+  unlocked_at: string;
+}

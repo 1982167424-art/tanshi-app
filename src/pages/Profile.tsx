@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { Camera, Calendar, Hash, Clock, FileText, Repeat, Heart, MessageCircleHeart } from 'lucide-react';
 import GlassCard from '@/components/ui/GlassCard';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -7,6 +7,7 @@ import { useNotesStore } from '@/store/useNotesStore';
 import { useHabitsStore } from '@/store/useHabitsStore';
 import { useMoodStore } from '@/store/useMoodStore';
 import { useCompanionStore } from '@/store/useCompanionStore';
+import { useCheckinStore } from '@/store/useCheckinStore';
 import { formatDateTime, calculateAge } from '@/utils/date';
 
 const Profile: React.FC = () => {
@@ -16,7 +17,10 @@ const Profile: React.FC = () => {
   const { getUserHabits } = useHabitsStore();
   const { getUserMoods } = useMoodStore();
   const { getUserConversations } = useCompanionStore();
+  const { titles, loadTitles } = useCheckinStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { loadTitles(); }, [loadTitles]);
 
   const isTeen = currentUser?.isTeenMode;
   const daysCount = getUserDays().length;
@@ -127,6 +131,25 @@ const Profile: React.FC = () => {
           </div>
         </div>
       </GlassCard>
+
+      {/* 称号展示 */}
+      {titles.length > 0 && (
+        <GlassCard className="p-5">
+          <h3 className="text-base font-serif font-semibold text-amber-900 mb-3 dark:text-gray-100">🏆 我的称号</h3>
+          <div className="flex flex-wrap gap-2">
+            {titles.map(t => (
+              <span key={t.id} className={`px-3 py-1.5 rounded-full text-sm font-serif ${
+                t.type === 'milestone' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300'
+                : t.type === 'special' ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+                : t.type === 'holiday' ? 'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300'
+                : 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300'
+              }`}>
+                {t.type === 'milestone' ? '🏆' : t.type === 'special' ? '💎' : t.type === 'holiday' ? '🎉' : '⭐'} {t.name}
+              </span>
+            ))}
+          </div>
+        </GlassCard>
+      )}
 
       <GlassCard className="p-6">
         <h3 className="text-lg font-serif font-semibold text-amber-900 mb-5 dark:text-gray-100">

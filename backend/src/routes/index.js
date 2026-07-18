@@ -12,6 +12,7 @@ const trashRoutes = require('./trash.routes');
 const aiRoutes = require('./ai.routes');
 const dataRoutes = require('./data.routes');
 const adminRoutes = require('./admin.routes');
+const checkinRoutes = require('./checkin.routes');
 
 // 聚合所有路由，统一前缀 /api 由 server.js 挂载
 router.use('/auth', authRoutes);
@@ -25,5 +26,6 @@ router.use('/trash', trashRoutes);
 router.use('/ai', aiRoutes);
 router.use('/data', dataRoutes);
 router.use('/admin', adminRoutes);
+router.use('/checkin', checkinRoutes);
 
 module.exports = router;

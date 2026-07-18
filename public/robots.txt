@@ -1,0 +1,11 @@
+User-agent: *
+Disallow: /api/
+Disallow: /.env
+Disallow: /.env.local
+Disallow: /package.json
+Disallow: /vercel.json
+Disallow: /config.js
+Disallow: /config.json
+Disallow: /.git/
+
+Sitemap: https://textime.top/sitemap.xml

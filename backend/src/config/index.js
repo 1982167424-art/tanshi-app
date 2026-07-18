@@ -1,37 +1,36 @@
 require('dotenv').config();
 
 const config = {
-  // 服务端口
   port: parseInt(process.env.PORT, 10) || 3001,
 
-  // JWT 配置
   jwt: {
-    secret: process.env.JWT_SECRET || 'tanshi_jwt_secret_2024',
+    secret: process.env.JWT_SECRET,
     expiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
 
-  // 管理后台密钥
-  adminKey: process.env.ADMIN_KEY || 'tanshi_admin_2024',
+  adminKey: process.env.ADMIN_KEY,
+  accessCode: process.env.ACCESS_CODE,
 
-  // 注册访问口令
-  accessCode: process.env.ACCESS_CODE || 'tetiCmop02I81`E1!2#',
-
-  // Turnstile 人机验证配置
   turnstile: {
-    secretKey: process.env.TURNSTILE_SECRET_KEY || '0x4AAAAAAD1vY6CN9r0-TJxjwxdUUsmsqUc',
-    siteKey: process.env.TURNSTILE_SITE_KEY || '0x4AAAAAAD1vYyHUN3U7Rkdz',
+    secretKey: process.env.TURNSTILE_SECRET_KEY,
+    siteKey: process.env.TURNSTILE_SITE_KEY,
   },
 
-  // SQLite 数据库配置
   db: {
     path: process.env.DB_PATH || './data/tanshi.db',
   },
 
-  // AI 服务配置（使用 Pollinations.ai 免费服务，无需 API Key）
   ai: {
     apiUrl: 'https://text.pollinations.ai/openai',
     model: 'openai',
   },
 };
+
+// 启动时校验必要环境变量
+if (!config.jwt.secret) { console.error('❌ 缺少环境变量: JWT_SECRET'); process.exit(1); }
+if (!config.adminKey) { console.error('❌ 缺少环境变量: ADMIN_KEY'); process.exit(1); }
+if (!config.accessCode) { console.error('❌ 缺少环境变量: ACCESS_CODE'); process.exit(1); }
+if (!config.turnstile.secretKey) { console.error('❌ 缺少环境变量: TURNSTILE_SECRET_KEY'); process.exit(1); }
+if (!config.turnstile.siteKey) { console.error('❌ 缺少环境变量: TURNSTILE_SITE_KEY'); process.exit(1); }
 
 module.exports = config;

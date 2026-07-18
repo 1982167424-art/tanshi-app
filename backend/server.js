@@ -13,17 +13,51 @@ const routes = require('./src/routes');
 const logger = require('./src/middleware/logger');
 const errorHandler = require('./src/middleware/errorHandler');
 const { checkHeaders, jsonDepthLimit, paramCountLimit, requestTimeout, bodySizeLimit } = require('./src/middleware/security');
+const { originVerification, preventUidEnumeration, checkAbnormalTraffic } = require('./src/middleware/securityAdvanced');
 const db = require('./src/models/database');
 
 const app = express();
 const PORT = config.port;
 
-// ============ 安全响应头 ============
+// 信任代理（Railway/Cloudflare 反向代理）
+app.set('trust proxy', 1);
+
+// ============ 安全响应头（完整配置）============
 app.use(helmet({
-  contentSecurityPolicy: false,
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "https://challenges.cloudflare.com"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'", "https://api.textime.top", "https://challenges.cloudflare.com"],
+      fontSrc: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["https://challenges.cloudflare.com"],
+    },
+  },
   crossOriginEmbedderPolicy: false,
+  hsts: { maxAge: 63072000, includeSubDomains: true, preload: true },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  noSniff: true,
+  frameguard: { action: 'deny' },
+  xssFilter: true,
+  hidePoweredBy: true,
 }));
 app.disable('x-powered-by');
+
+// 额外安全头
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
 
 // ============ 请求超时（慢速攻击防护，10秒）============
 app.use(requestTimeout(10000));
@@ -64,18 +98,16 @@ const sensitiveLimiter = rateLimit({
 });
 app.use('/api/users', sensitiveLimiter);
 
-// ============ CORS 配置（统一逻辑）============
+// ============ CORS 配置（严格白名单）============
 const ALLOWED_ORIGINS = [
   'https://textime.top',
   'https://exteenfit.vercel.app',
 ];
 app.use(cors({
   origin: (origin, callback) => {
-    // 无 origin（同域请求/Postman/curl）或在白名单内 → 放行
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+    if (origin && ALLOWED_ORIGINS.includes(origin)) {
       callback(null, true);
     } else {
-      // 不在白名单 → 拒绝，不抛错（避免泄露内部信息）
       callback(null, false);
     }
   },
@@ -88,6 +120,8 @@ app.use(cors({
 app.use(express.json({
   limit: '100kb',
   verify: (req, res, buf) => {
+    // 跳过无 body 的请求（GET/DELETE/空body POST）
+    if (buf.length === 0) return;
     try {
       JSON.parse(buf);
     } catch {
@@ -97,11 +131,22 @@ app.use(express.json({
   },
 }));
 
-// ============ 安全中间件（请求头检查 + JSON深度 + 参数数量 + 请求体大小）============
-app.use(checkHeaders);
-app.use(bodySizeLimit(100 * 1024));
-app.use(jsonDepthLimit);
-app.use(paramCountLimit);
+// 处理 JSON 解析错误
+app.use((err, req, res, next) => {
+  if (err.type === 'entity.parse.failed') {
+    return res.status(400).json({ success: false, message: '请求格式错误' });
+  }
+  next(err);
+});
+
+// ============ 安全中间件 ============
+app.use(checkAbnormalTraffic);  // 异常流量检测
+app.use(originVerification);    // Origin 校验
+app.use(checkHeaders);          // 请求头检查
+app.use(bodySizeLimit(100 * 1024));  // 请求体大小限制
+app.use(jsonDepthLimit);        // JSON 深度限制
+app.use(paramCountLimit);       // 参数数量限制
+app.use(preventUidEnumeration); // 用户ID防枚举
 
 app.use(logger);
 
@@ -127,6 +172,12 @@ app.get('/api/turnstile/script', async (req, res) => {
 
 // ============ 业务路由 ============
 app.use('/api', routes);
+
+// HTML 转义函数（防 XSS）
+const escapeHtml = (str) => {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+};
 
 // ============ 管理后台页面 ============
 app.get('/', (req, res) => {
@@ -183,7 +234,7 @@ document.getElementById('form').addEventListener('submit', function(e){
 
   // 验证通过，种 cookie（有效期7天）
   if (queryCode === config.accessCode) {
-    res.setHeader('Set-Cookie', `access_code=${encodeURIComponent(config.accessCode)}; Path=/; Max-Age=604800; HttpOnly`);
+    res.setHeader('Set-Cookie', `access_code=${encodeURIComponent(config.accessCode)}; Path=/; Max-Age=604800; HttpOnly; Secure; SameSite=Strict`);
     return res.redirect('/');
   }
 
@@ -209,13 +260,13 @@ document.getElementById('form').addEventListener('submit', function(e){
         const uMoods = moods.filter(m => m.user_uid === u.uid).length;
         const uReminders = reminders.filter(r => r.user_uid === u.uid).length;
         return [
-          '<div class="user-card" id="user-' + u.uid + '">',
+          '<div class="user-card" id="user-' + escapeHtml(u.uid) + '">',
           '  <div class="user-header">',
-          '    <div class="avatar">' + u.username.charAt(0).toUpperCase() + '</div>',
-          '    <div class="user-info"><h3>' + u.username + '</h3><p>' + u.uid + '</p></div>',
+          '    <div class="avatar">' + escapeHtml(u.username.charAt(0).toUpperCase()) + '</div>',
+          '    <div class="user-info"><h3>' + escapeHtml(u.username) + '</h3><p>' + escapeHtml(u.uid) + '</p></div>',
           '  </div>',
           '  <div style="font-size:.85rem;color:#a16207">',
-          '    <span style="margin-right:12px">🎂 ' + (u.birthday || '') + '</span>',
+          '    <span style="margin-right:12px">🎂 ' + escapeHtml(u.birthday || '') + '</span>',
           '    <span class="badge ' + (u.isTeenMode ? 'badge-teen' : 'badge-normal') + '">' + (u.isTeenMode ? '青少年模式' : '标准模式') + '</span>',
           '  </div>',
           '  <div class="data-stats">',
@@ -226,7 +277,7 @@ document.getElementById('form').addEventListener('submit', function(e){
           '    <div class="data-stat"><div class="num">' + uReminders + '</div><div class="label">提醒</div></div>',
           '  </div>',
           '  <div style="font-size:.8rem;color:#a16207">注册时间：' + (u.createdAt ? new Date(u.createdAt).toLocaleDateString('zh-CN') : '-') + '</div>',
-          '  <button class="delete-btn" onclick="deleteUser(\'' + u.uid + '\')">🗑️ 删除用户及所有数据</button>',
+          '  <button class="delete-btn" data-uid="' + escapeHtml(u.uid) + '">🗑️ 删除用户及所有数据</button>',
           '</div>',
         ].join('\n');
       }).join('');
@@ -287,32 +338,42 @@ ${userCards}
 </div>
 <button class="refresh-btn" onclick="location.reload()">🔄 刷新</button>
 <script>
-const ADMIN_KEY = '${adminKey}';
-async function deleteUser(uid){
-  if(!confirm('确定删除该用户及所有数据？此操作不可恢复！'))return;
-  try{
-    const r=await fetch('/api/admin/users/'+uid,{method:'DELETE',headers:{'X-Admin-Key':ADMIN_KEY}});
-    const d=await r.json();
-    if(d.success){alert('已删除');location.reload();}
-    else alert('失败：'+d.message);
-  }catch(e){alert('失败：'+e.message);}
-}
+document.querySelectorAll('.delete-btn').forEach(btn => {
+  btn.addEventListener('click', async function() {
+    const uid = this.dataset.uid;
+    if(!confirm('确定删除该用户及所有数据？此操作不可恢复！'))return;
+    try{
+      const r=await fetch('/api/admin/users/'+uid,{method:'DELETE',headers:{'X-Admin-Key':new URLSearchParams(window.location.search).get('code')||''}});
+      const d=await r.json();
+      if(d.success){alert('已删除');location.reload();}
+      else alert('失败：'+d.message);
+    }catch(e){alert('失败：'+e.message);}
+  });
+});
 </script>
 </body>
 </html>`);
 });
 
-// ============ 404 / 405 处理 ============
+// ============ 404 / 405 处理（所有不存在路径返回404）============
 app.use((req, res) => {
-  // 如果是 API 路径，返回 405 提示方法不允许
-  if (req.path.startsWith('/api/')) {
-    return res.status(405).json({ success: false, message: '请求方法不允许' });
+  // 记录扫描行为
+  const suspiciousPaths = ['/admin', '/wp-admin', '/phpmyadmin', '/.env', '/config', '/debug', '/trace', '/actuator'];
+  if (suspiciousPaths.some(p => req.path.toLowerCase().includes(p))) {
+    console.warn(JSON.stringify({
+      level: 'WARN', time: new Date().toISOString(),
+      event: 'SCAN_ATTEMPT', path: req.path, ip: req.ip, ua: req.headers['user-agent'] || '',
+    }));
   }
-  res.status(404).json({ success: false, message: '接口不存在' });
+  return res.status(404).json({ success: false, message: '资源不存在' });
 });
 
 // ============ 错误处理 ============
 app.use(errorHandler);
+
+// ============ 定时备份 ============
+const { startScheduledBackup } = require('./src/utils/backup');
+startScheduledBackup();
 
 // ============ 启动 ============
 const server = app.listen(PORT, () => {

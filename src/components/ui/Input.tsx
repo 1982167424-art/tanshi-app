@@ -9,6 +9,8 @@ interface InputProps {
   placeholder?: string;
   error?: string;
   className?: string;
+  max?: string;
+  min?: string;
 }
 
 const Input: React.FC<InputProps> = ({
@@ -20,6 +22,8 @@ const Input: React.FC<InputProps> = ({
   placeholder,
   error,
   className = '',
+  max,
+  min,
 }) => {
   return (
     <div className={`w-full ${className}`}>
@@ -34,6 +38,8 @@ const Input: React.FC<InputProps> = ({
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
         placeholder={placeholder}
+        max={max}
+        min={min}
         className={`
           w-full px-4 py-2.5 font-serif
           bg-white/60 backdrop-blur-sm

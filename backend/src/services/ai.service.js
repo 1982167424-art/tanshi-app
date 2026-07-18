@@ -1,28 +1,41 @@
 const POLLINATIONS_API_URL = 'https://text.pollinations.ai/openai';
 const POLLINATIONS_MODEL = 'openai';
 
-// 调用 Pollinations AI（免费，无需 API Key）
-// 模型：gpt-oss-20b（OpenAI 开源模型，支持推理）
-const callMimo = async (systemPrompt, userPrompt, { temperature = 0.8, maxTokens = 200 } = {}) => {
-  const response = await fetch(POLLINATIONS_API_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: POLLINATIONS_MODEL,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature,
-      max_tokens: maxTokens,
-    }),
-  });
+// 带重试的 AI 调用
+const callMimo = async (systemPrompt, userPrompt, { temperature = 0.8, maxTokens = 200, retries = 2 } = {}) => {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
 
-  if (!response.ok) throw new Error('AI服务暂时不可用');
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
+      const response = await fetch(POLLINATIONS_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: POLLINATIONS_MODEL,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature,
+          max_tokens: maxTokens,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!response.ok) throw new Error(`AI服务返回 ${response.status}`);
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+      if (!content) throw new Error('AI返回内容为空');
+      return content;
+    } catch (error) {
+      if (i === retries) throw error;
+      // 等待后重试
+      await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
 };
 
 // AI 对话

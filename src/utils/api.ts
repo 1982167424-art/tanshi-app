@@ -1,13 +1,13 @@
-import { Day, Note, Habit, Mood, Reminder, DeletedItem, User } from '@/types';
+import { Day, Note, Habit, Mood, Reminder, DeletedItem, User, CheckinStatus, CheckinResult, UserTitle } from '@/types';
 
 // 使用相对路径，通过 Vercel 代理转发到后端，隐藏原站域名
 const API_BASE = (import.meta.env.VITE_API_BASE || '') + '/api';
 
-// Token管理
+// Token管理：sessionStorage（Vercel rewrites 不支持 httpOnly Cookie）
 const TOKEN_KEY = 'tanshi_token';
-const getToken = () => localStorage.getItem(TOKEN_KEY);
-const setToken = (token: string) => localStorage.setItem(TOKEN_KEY, token);
-const removeToken = () => localStorage.removeItem(TOKEN_KEY);
+const getToken = () => sessionStorage.getItem(TOKEN_KEY);
+const setToken = (token: string) => sessionStorage.setItem(TOKEN_KEY, token);
+const removeToken = () => sessionStorage.removeItem(TOKEN_KEY);
 
 // 请求超时控制
 const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs = 15000): Promise<Response> => {
@@ -188,5 +188,12 @@ export const api = {
         method: 'POST',
         body: JSON.stringify({ moodData }),
       }).then(d => d.analysis),
+  },
+
+  // 签到
+  checkin: {
+    getStatus: () => request<CheckinStatus>('/checkin/status'),
+    checkin: () => request<CheckinResult>('/checkin', { method: 'POST' }),
+    getTitles: () => request<{ titles: UserTitle[] }>('/checkin/titles').then(d => d.titles),
   },
 };

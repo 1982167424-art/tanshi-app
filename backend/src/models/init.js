@@ -100,11 +100,61 @@ function initDatabase() {
     );
   `);
 
-  // ============ 数据库迁移：为旧表补充 created_at 列 ============
+  // 签到记录表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS checkins (
+      id            TEXT PRIMARY KEY,
+      user_uid      TEXT NOT NULL,
+      checkin_date  TEXT NOT NULL,
+      points_earned INTEGER DEFAULT 2,
+      renewed       INTEGER DEFAULT 0,
+      created_at    TEXT NOT NULL,
+      FOREIGN KEY (user_uid) REFERENCES users(uid) ON DELETE CASCADE
+    );
+  `);
+
+  // 用户称号表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS user_titles (
+      id            TEXT PRIMARY KEY,
+      user_uid      TEXT NOT NULL,
+      title_code    TEXT NOT NULL,
+      title_name    TEXT NOT NULL,
+      title_type    TEXT NOT NULL,
+      is_permanent  INTEGER DEFAULT 0,
+      unlocked_at   TEXT NOT NULL,
+      FOREIGN KEY (user_uid) REFERENCES users(uid) ON DELETE CASCADE
+    );
+  `);
+
+  // 设备登录记录表（限5台设备）
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS login_sessions (
+      id          TEXT PRIMARY KEY,
+      user_uid    TEXT NOT NULL,
+      device_info TEXT,
+      ip_address  TEXT,
+      login_at    TEXT NOT NULL,
+      FOREIGN KEY (user_uid) REFERENCES users(uid) ON DELETE CASCADE
+    );
+  `);
+
+  // IP 注册记录表（每IP只能注册1个账号）
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS registered_ips (
+      ip_address TEXT PRIMARY KEY,
+      user_uid   TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_uid) REFERENCES users(uid) ON DELETE CASCADE
+    );
+  `);
+
+  // ============ 数据库迁移 ============
   migrateColumn('moods', 'created_at', 'TEXT');
   migrateColumn('reminders', 'created_at', 'TEXT');
-  // users 表增加 access_code 列（用户专属访问口令）
   migrateColumn('users', 'access_code', 'TEXT');
+  migrateColumn('users', 'points', 'INTEGER DEFAULT 0');
+  migrateColumn('users', 'total_checkin_days', 'INTEGER DEFAULT 0');
 
   console.log('✅ 数据库表初始化完成');
 }

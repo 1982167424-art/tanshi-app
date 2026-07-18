@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
+import { loadTurnstile, getTurnstileTheme } from '@/utils/turnstileLoader';
 import { calculateAge } from '@/utils/date';
 import GlassCard from '@/components/ui/GlassCard';
 import Button from '@/components/ui/Button';
@@ -22,9 +23,37 @@ const Register: React.FC = () => {
   const [showAccessCodeModal, setShowAccessCodeModal] = useState(false);
   const [generatedAccessCode, setGeneratedAccessCode] = useState('');
   const [copied, setCopied] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const [widgetReady, setWidgetReady] = useState(false);
+  const [widgetFailed, setWidgetFailed] = useState(false);
+  const turnstileRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<string>('');
 
   const { register } = useAuthStore();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    loadTurnstile().then(ok => { if (ok) setWidgetReady(true); else setWidgetFailed(true); });
+  }, []);
+
+  useEffect(() => {
+    if (!widgetReady || !turnstileRef.current || !window.turnstile || widgetIdRef.current) return;
+    widgetIdRef.current = window.turnstile.render(turnstileRef.current, {
+      sitekey: import.meta.env.VITE_TURNSTILE_SITE_KEY || '0x4AAAAAAD1vYyHUN3U7Rkdz',
+      callback: (token: string) => { setTurnstileToken(token); setError(''); },
+      'expired-callback': () => setTurnstileToken(''),
+      'error-callback': () => setError('验证失败，请刷新页面重试'),
+      theme: getTurnstileTheme(),
+    });
+  }, [widgetReady]);
+
+  const handleRetry = useCallback(() => {
+    widgetIdRef.current = '';
+    setWidgetReady(false);
+    setWidgetFailed(false);
+    setTurnstileToken('');
+    loadTurnstile().then(ok => { if (ok) setWidgetReady(true); else setWidgetFailed(true); });
+  }, []);
 
   const validatePassword = (pwd: string): { valid: boolean; message: string } => {
     if (pwd.length < 8) {
@@ -52,7 +81,7 @@ const Register: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
+    if (!turnstileToken) { setError('请先完成人机验证'); return; }
     if (password !== confirmPassword) {
       setError('两次输入的密码不一致');
       return;
@@ -73,7 +102,6 @@ const Register: React.FC = () => {
     setShowAgeModal(false);
 
     try {
-      const turnstileToken = sessionStorage.getItem('turnstile_token') || undefined;
       const result = await register(username, password, birthday, turnstileToken);
       if (result.success && result.accessCode) {
         setGeneratedAccessCode(result.accessCode);
@@ -159,6 +187,7 @@ const Register: React.FC = () => {
               type="date"
               value={birthday}
               onChange={setBirthday}
+              max={new Date().toISOString().split('T')[0]}
             />
 
             <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 dark:bg-[#0f3460]/30 dark:border-white/10">
@@ -168,13 +197,28 @@ const Register: React.FC = () => {
               </p>
             </div>
 
+            <div className="flex flex-col items-center gap-2">
+              {widgetReady && <div ref={turnstileRef} />}
+              {widgetFailed && (
+                <div className="flex flex-col items-center gap-2">
+                  <p className="text-amber-600 text-xs dark:text-amber-400">验证组件加载失败</p>
+                  <button type="button" onClick={handleRetry} className="text-amber-500 text-xs underline hover:text-amber-600">点击重试</button>
+                </div>
+              )}
+              {!widgetReady && !widgetFailed && (
+                <div className="w-full h-16 flex items-center justify-center">
+                  <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
+            </div>
+
             {error && (
               <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm font-serif text-center dark:bg-red-900/20 dark:border-red-900/30">
                 {error}
               </div>
             )}
 
-            <Button type="submit" className="w-full" size="lg" disabled={loading}>
+            <Button type="submit" className="w-full" size="lg" disabled={loading || !turnstileToken}>
               {loading ? '注册中...' : '创建账号'}
             </Button>
           </form>

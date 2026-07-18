@@ -49,11 +49,12 @@ const updateUser = (uid, updates) => {
 };
 
 // 修改密码：验证旧密码后更新
-const changePassword = (uid, oldPassword, newPassword) => {
+const changePassword = async (uid, oldPassword, newPassword) => {
   const row = db.prepare('SELECT * FROM users WHERE uid = ?').get(uid);
   if (!row) return false;
 
-  if (!verifyPassword(oldPassword, row.password)) {
+  const isValid = await verifyPassword(oldPassword, row.password);
+  if (!isValid) {
     const err = new Error('原密码错误'); err.status = 400; throw err;
   }
 
@@ -62,7 +63,8 @@ const changePassword = (uid, oldPassword, newPassword) => {
     const err = new Error(check.message); err.status = 400; throw err;
   }
 
-  db.prepare('UPDATE users SET password = ? WHERE uid = ?').run(encryptPassword(newPassword), uid);
+  const hashed = await encryptPassword(newPassword);
+  db.prepare('UPDATE users SET password = ? WHERE uid = ?').run(hashed, uid);
   return true;
 };
 

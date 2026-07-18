@@ -5,16 +5,18 @@ const { authRequired } = require('../middleware/auth');
 
 router.use(authRequired);
 
-// GET /api/users/:uid - 获取用户
-router.get('/:uid', getUser);
+// UID 格式验证（防枚举）
+const uidPattern = /^TS[A-Z0-9]{8,12}$/;
+const validateUid = (req, res, next) => {
+  if (!uidPattern.test(req.params.uid)) {
+    return res.status(400).json({ success: false, message: '用户ID格式无效' });
+  }
+  next();
+};
 
-// PUT /api/users/:uid - 更新用户
-router.put('/:uid', updateUser);
-
-// PUT /api/users/:uid/password - 修改密码
-router.put('/:uid/password', changePassword);
-
-// DELETE /api/users/:uid - 删除用户
-router.delete('/:uid', deleteUser);
+router.get('/:uid', validateUid, getUser);
+router.put('/:uid', validateUid, updateUser);
+router.put('/:uid/password', validateUid, changePassword);
+router.delete('/:uid', validateUid, deleteUser);
 
 module.exports = router;

@@ -35,13 +35,13 @@ const updateUser = (req, res, next) => {
 };
 
 // 修改密码
-const changePassword = (req, res, next) => {
+const changePassword = async (req, res, next) => {
   try {
     const { uid } = req.params;
     if (req.user.uid !== uid) return fail(res, '无权修改该用户', 403);
     const { oldPassword, newPassword } = req.body;
     if (!oldPassword || !newPassword) return fail(res, '请提供原密码和新密码');
-    userService.changePassword(uid, oldPassword, newPassword);
+    await userService.changePassword(uid, oldPassword, newPassword);
     return success(res, null, '密码修改成功');
   } catch (err) {
     next(err);

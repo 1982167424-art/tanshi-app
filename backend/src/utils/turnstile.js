@@ -8,13 +8,8 @@ const verifyTurnstileToken = async (token) => {
   try {
     const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        secret: config.turnstile.secretKey,
-        response: token,
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ secret: config.turnstile.secretKey, response: token }),
     });
 
     const data = await response.json();
@@ -23,7 +18,6 @@ const verifyTurnstileToken = async (token) => {
     }
     return { valid: true, message: '验证通过' };
   } catch (error) {
-    console.error('Turnstile 验证失败:', error);
     return { valid: false, message: '验证服务异常' };
   }
 };
