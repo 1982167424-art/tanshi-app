@@ -19,8 +19,25 @@ const db = require('./src/models/database');
 const app = express();
 const PORT = config.port;
 
-// 信任代理（Railway/Cloudflare 反向代理）
-app.set('trust proxy', 1);
+// ============ 获取真实客户端 IP（兼容 Cloudflare / Vercel / Railway 多层代理）============
+const getClientIp = (req) => {
+  // Cloudflare 传递的真实用户 IP（最可靠）
+  const cfIp = req.headers['cf-connecting-ip'];
+  if (cfIp) return cfIp;
+
+  // Vercel / Railway 传递的 X-Forwarded-For 链，第一个通常是用户真实 IP
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    const first = forwarded.split(',')[0]?.trim();
+    if (first) return first;
+  }
+
+  // 回退到 express 解析的 IP
+  return req.ip;
+};
+
+// ============ 信任代理（Cloudflare + Vercel + Railway 多层反向代理）============
+app.set('trust proxy', ['loopback', 'linklocal', 'uniquelocal']);
 
 // ============ 安全响应头（完整配置）============
 app.use(helmet({
@@ -62,21 +79,47 @@ app.use((req, res, next) => {
 // ============ 请求超时（慢速攻击防护，10秒）============
 app.use(requestTimeout(10000));
 
+// ============ CORS 配置（严格白名单）============
+// 必须放在限流器之前：浏览器预检 OPTIONS 和 429 响应都需要带 CORS 头。
+const ALLOWED_ORIGINS = [
+  'https://textime.top',
+  'https://www.textime.top',
+  'https://exteenfit.vercel.app',
+];
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, false);
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Admin-Key', 'X-API-Key'],
+};
+app.use(cors(corsOptions));
+app.options('/api/*', cors(corsOptions));
+
 // ============ 速率限制（收紧阈值）============
 // 全局限制：每IP每分钟30次
 const limiter = rateLimit({
   windowMs: 60 * 1000,
   max: 30,
+  keyGenerator: (req) => getClientIp(req),
+  skip: (req) => req.method === 'OPTIONS',
   message: { success: false, message: '请求过于频繁，请稍后再试' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 app.use('/api', limiter);
 
-// 认证接口严格限制（防暴力破解）：每IP每15分钟3次
+// 认证接口严格限制（防暴力破解）：每IP每15分钟5次
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 3,
+  max: 5,
+  keyGenerator: (req) => getClientIp(req),
+  skip: (req) => req.method === 'OPTIONS',
   message: { success: false, message: '登录/注册请求过于频繁，请15分钟后再试' },
   skipSuccessfulRequests: true,
 });
@@ -86,6 +129,8 @@ app.use('/api/auth', authLimiter);
 const aiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 5,
+  keyGenerator: (req) => getClientIp(req),
+  skip: (req) => req.method === 'OPTIONS',
   message: { success: false, message: 'AI请求过于频繁，请稍后再试' },
 });
 app.use('/api/ai', aiLimiter);
@@ -94,27 +139,11 @@ app.use('/api/ai', aiLimiter);
 const sensitiveLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 3,
+  keyGenerator: (req) => getClientIp(req),
+  skip: (req) => req.method === 'OPTIONS',
   message: { success: false, message: '操作过于频繁，请1小时后再试' },
 });
 app.use('/api/users', sensitiveLimiter);
-
-// ============ CORS 配置（严格白名单）============
-const ALLOWED_ORIGINS = [
-  'https://textime.top',
-  'https://exteenfit.vercel.app',
-];
-app.use(cors({
-  origin: (origin, callback) => {
-    if (origin && ALLOWED_ORIGINS.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(null, false);
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-}));
 
 // ============ JSON 解析（限制大小 + 错误处理）============
 app.use(express.json({
@@ -362,7 +391,7 @@ app.use((req, res) => {
   if (suspiciousPaths.some(p => req.path.toLowerCase().includes(p))) {
     console.warn(JSON.stringify({
       level: 'WARN', time: new Date().toISOString(),
-      event: 'SCAN_ATTEMPT', path: req.path, ip: req.ip, ua: req.headers['user-agent'] || '',
+      event: 'SCAN_ATTEMPT', path: req.path, ip: getClientIp(req), ua: req.headers['user-agent'] || '',
     }));
   }
   return res.status(404).json({ success: false, message: '资源不存在' });

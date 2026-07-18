@@ -6,6 +6,7 @@ import { useDaysStore } from '@/store/useDaysStore';
 import { useNotesStore } from '@/store/useNotesStore';
 import { useHabitsStore } from '@/store/useHabitsStore';
 import { useMoodStore } from '@/store/useMoodStore';
+import { API_BASE } from '@/utils/api';
 import Layout from '@/components/Layout/Layout';
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
@@ -64,7 +65,7 @@ const App: React.FC = () => {
 
     const token = sessionStorage.getItem('tanshi_token');
     if (token && currentUser) {
-      fetch('/api/days', {
+      fetch(`${API_BASE}/days`, {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       }).then(res => {
         if (res.status === 401) { logout(); } else { syncUser(); }
@@ -76,7 +77,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     // 必须同时有currentUser和有效的token才能加载数据
-    const token = localStorage.getItem('tanshi_token');
+    const token = sessionStorage.getItem('tanshi_token');
     if (currentUser && token) {
       checkTeenModeAge();
       if (loadedUserRef.current !== currentUser.uid) {

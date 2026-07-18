@@ -7,7 +7,15 @@ const { generateId } = require('../utils/crypto');
 
 const MAX_DEVICES = 5;
 
-const getIp = (req) => (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.ip;
+const getIp = (req) => {
+  // 优先使用 Cloudflare 传递的真实 IP
+  const cfIp = req.headers['cf-connecting-ip'];
+  if (cfIp) return cfIp;
+  // 回退到 X-Forwarded-For 链中的第一个 IP
+  const forwarded = (req.headers['x-forwarded-for'] || '').split(',')[0]?.trim();
+  if (forwarded) return forwarded;
+  return req.ip;
+};
 
 const register = async (req, res, next) => {
   try {

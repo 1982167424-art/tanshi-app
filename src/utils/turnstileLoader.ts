@@ -11,6 +11,8 @@
  * 因此后端代理方式实际无法让脚本正常初始化，仅作为网络探测的兜底。
  */
 
+import { API_BASE } from './api';
+
 declare global {
   interface Window {
     turnstile?: {
@@ -26,7 +28,7 @@ declare global {
 // 官方 CDN（render=explicit：仅通过 window.turnstile.render() 主动渲染）
 const PRIMARY_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 // 后端代理（Railway 部署在美国，可访问 Cloudflare；仅作网络兜底）
-const FALLBACK_URL = '/api/turnstile/script';
+const FALLBACK_URL = `${API_BASE}/turnstile/script`;
 
 const SCRIPT_TIMEOUT_MS = 12000;
 const MAX_RETRY = 3;

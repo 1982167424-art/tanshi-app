@@ -1,7 +1,11 @@
 import { Day, Note, Habit, Mood, Reminder, DeletedItem, User, CheckinStatus, CheckinResult, UserTitle } from '@/types';
 
-// 使用相对路径，通过 Vercel 代理转发到后端，隐藏原站域名
-const API_BASE = (import.meta.env.VITE_API_BASE || '') + '/api';
+// API 基址：
+// - 本地开发：走 Vite proxy（空串 + /api → localhost:3001）
+// - 生产环境：直连 https://api.textime.top（浏览器可通过 Cloudflare 质询；
+//   避免 Vercel 服务器端 rewrite 被 Cloudflare 判定为机器人而返回 JS Challenge）
+// - 可用 VITE_API_BASE 环境变量覆盖
+export const API_BASE = (import.meta.env.VITE_API_BASE || (import.meta.env.PROD ? 'https://api.textime.top' : '')) + '/api';
 
 // Token管理：sessionStorage（Vercel rewrites 不支持 httpOnly Cookie）
 const TOKEN_KEY = 'tanshi_token';
@@ -39,6 +43,15 @@ async function request<T = unknown>(url: string, options?: RequestInit): Promise
     }
     console.error(`API请求失败 [${url}]:`, error);
     throw new Error('网络连接失败，请检查网络后重试');
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  const cloudflareMitigation = res.headers.get('cf-mitigated');
+  if (!contentType.includes('application/json')) {
+    if (cloudflareMitigation === 'challenge') {
+      throw new Error('API 被 Cloudflare 安全验证拦截，请检查 API 域名的 WAF/机器人规则');
+    }
+    throw new Error('服务器响应异常，请稍后重试');
   }
 
   let body: { success: boolean; message: string; data: T };
