@@ -81,7 +81,8 @@ const Register: React.FC = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!turnstileToken) { setError('请先完成人机验证'); return; }
+    // Turnstile 加载失败时允许跳过验证（国内无代理兜底）
+    if (!turnstileToken && !widgetFailed) { setError('请先完成人机验证'); return; }
     if (password !== confirmPassword) {
       setError('两次输入的密码不一致');
       return;
@@ -102,7 +103,7 @@ const Register: React.FC = () => {
     setShowAgeModal(false);
 
     try {
-      const result = await register(username, password, birthday, turnstileToken);
+      const result = await register(username, password, birthday, turnstileToken || undefined);
       if (result.success && result.accessCode) {
         setGeneratedAccessCode(result.accessCode);
         sessionStorage.removeItem('turnstile_token');
@@ -201,7 +202,7 @@ const Register: React.FC = () => {
               {widgetReady && <div ref={turnstileRef} />}
               {widgetFailed && (
                 <div className="flex flex-col items-center gap-2">
-                  <p className="text-amber-600 text-xs dark:text-amber-400">验证组件加载失败</p>
+                  <p className="text-amber-600 text-xs dark:text-amber-400">验证组件加载失败，可直接注册</p>
                   <button type="button" onClick={handleRetry} className="text-amber-500 text-xs underline hover:text-amber-600">点击重试</button>
                 </div>
               )}
@@ -218,7 +219,7 @@ const Register: React.FC = () => {
               </div>
             )}
 
-            <Button type="submit" className="w-full" size="lg" disabled={loading || !turnstileToken}>
+            <Button type="submit" className="w-full" size="lg" disabled={loading || (!turnstileToken && !widgetFailed)}>
               {loading ? '注册中...' : '创建账号'}
             </Button>
           </form>

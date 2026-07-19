@@ -20,9 +20,11 @@ const getIp = (req) => {
 const register = async (req, res, next) => {
   try {
     const { username, password, birthday, turnstileToken } = req.body;
-    if (!turnstileToken) return fail(res, '请完成人机验证', 403);
-    const tr = await verifyTurnstileToken(turnstileToken);
-    if (!tr.valid) return fail(res, tr.message, 403);
+    // Turnstile 可选：有 token 则验证，无 token 跳过（国内无代理时 Turnstile 无法加载）
+    if (turnstileToken) {
+      const tr = await verifyTurnstileToken(turnstileToken);
+      if (!tr.valid) return fail(res, tr.message, 403);
+    }
 
     // 同一 IP 只能注册一个账号
     const ip = getIp(req);
@@ -43,9 +45,11 @@ const register = async (req, res, next) => {
 const login = async (req, res, next) => {
   try {
     const { username, password, accessCode, turnstileToken } = req.body;
-    if (!turnstileToken) return fail(res, '请完成人机验证', 403);
-    const tr = await verifyTurnstileToken(turnstileToken);
-    if (!tr.valid) return fail(res, tr.message, 403);
+    // Turnstile 可选：有 token 则验证，无 token 跳过（国内无代理时 Turnstile 无法加载）
+    if (turnstileToken) {
+      const tr = await verifyTurnstileToken(turnstileToken);
+      if (!tr.valid) return fail(res, tr.message, 403);
+    }
 
     const user = await authService.loginUser(username, password, accessCode);
     const ip = getIp(req);

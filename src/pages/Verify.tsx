@@ -65,6 +65,12 @@ const Verify: React.FC = () => {
     });
   }, []);
 
+  // 跳过验证（国内无代理时 Turnstile 无法加载的兜底）
+  const handleSkip = useCallback(() => {
+    sessionStorage.setItem('turnstile_verified', 'true');
+    navigate(from, { replace: true });
+  }, [navigate, from]);
+
   // 清理
   useEffect(() => {
     return () => {
@@ -107,13 +113,22 @@ const Verify: React.FC = () => {
           {loadFailed && (
             <div className="flex flex-col items-center gap-3 py-6">
               <p className="text-amber-600 dark:text-amber-400 font-serif">验证组件加载失败</p>
-              <p className="text-gray-500 dark:text-gray-400 text-xs">请检查网络连接后刷新页面重试</p>
-              <button
-                onClick={handleRetry}
-                className="text-amber-500 hover:text-amber-600 font-serif text-sm underline dark:text-amber-400"
-              >
-                点击重试
-              </button>
+              <p className="text-gray-500 dark:text-gray-400 text-xs">可能是网络原因导致验证服务无法加载</p>
+              <div className="flex items-center gap-4 mt-2">
+                <button
+                  onClick={handleRetry}
+                  className="text-amber-500 hover:text-amber-600 font-serif text-sm underline dark:text-amber-400"
+                >
+                  点击重试
+                </button>
+                <span className="text-gray-300 dark:text-gray-600">|</span>
+                <button
+                  onClick={handleSkip}
+                  className="text-gray-500 hover:text-amber-600 font-serif text-sm underline dark:text-gray-400"
+                >
+                  继续访问
+                </button>
+              </div>
             </div>
           )}
 

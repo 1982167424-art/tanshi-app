@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
-  Home, CalendarDays, NotebookPen, Repeat, Heart, AlarmClock,
+  Home, CalendarDays, NotebookPen, Repeat, Heart,
   MessageCircleHeart, User, Settings, Menu, X, Sparkles, Trash2
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -23,7 +23,6 @@ const Sidebar: React.FC = () => {
     { path: '/notes', icon: NotebookPen, label: '笔记' },
     { path: '/habits', icon: Repeat, label: '习惯' },
     { path: '/mood', icon: Heart, label: '心情' },
-    { path: '/alarm', icon: AlarmClock, label: '闹钟' },
     { path: '/companion', icon: MessageCircleHeart, label: '暖心陪伴', highlight: true },
     { label: '娱乐', onClick: () => { setShowEntertainment(true); setMobileOpen(false); } },
     { label: '学习', onClick: () => { setShowLearning(true); setMobileOpen(false); } },

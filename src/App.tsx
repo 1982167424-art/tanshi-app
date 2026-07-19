@@ -16,7 +16,6 @@ import Days from '@/pages/Days';
 import Notes from '@/pages/Notes';
 import Habits from '@/pages/Habits';
 import Mood from '@/pages/Mood';
-import Alarm from '@/pages/Alarm';
 import Companion from '@/pages/Companion';
 import Profile from '@/pages/Profile';
 import Settings from '@/pages/Settings';
@@ -176,7 +175,6 @@ const App: React.FC = () => {
           <Route path="notes" element={<Notes />} />
           <Route path="habits" element={<Habits />} />
           <Route path="mood" element={<Mood />} />
-          <Route path="alarm" element={<Alarm />} />
           <Route path="profile" element={<Profile />} />
           <Route path="settings" element={<Settings />} />
           <Route path="search" element={<Search />} />
