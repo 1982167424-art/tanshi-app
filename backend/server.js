@@ -140,7 +140,8 @@ const sensitiveLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 3,
   keyGenerator: (req) => getClientIp(req),
-  skip: (req) => req.method === 'OPTIONS',
+  // GET（同步用户信息）不消耗敏感操作配额，只限 PUT/DELETE
+  skip: (req) => req.method === 'OPTIONS' || req.method === 'GET',
   message: { success: false, message: '操作过于频繁，请1小时后再试' },
 });
 app.use('/api/users', sensitiveLimiter);
