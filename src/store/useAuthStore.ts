@@ -11,6 +11,7 @@ interface AuthState {
   login: (username: string, password: string, accessCode?: string, turnstileToken?: string) => Promise<{ success: boolean; message: string }>;
   register: (username: string, password: string, birthday: string, turnstileToken?: string) => Promise<{ success: boolean; message: string; uid?: string; accessCode?: string }>;
   logout: () => void;
+  deleteAccount: () => Promise<{ success: boolean; message: string }>;
   updateUser: (updates: Partial<User>) => Promise<void>;
   syncUser: () => Promise<void>;
   toggleTeenMode: () => Promise<void>;
@@ -96,6 +97,23 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         api.removeToken();
         set({ currentUser: null, error: null });
+      },
+
+      // 注销账号：调用后端删除用户及所有关联数据，成功后清除本地状态
+      deleteAccount: async () => {
+        const { currentUser } = get();
+        if (!currentUser) return { success: false, message: '未登录' };
+        set({ isLoading: true, error: null });
+        try {
+          await api.users.delete(currentUser.uid);
+          api.removeToken();
+          set({ currentUser: null, isLoading: false, error: null });
+          return { success: true, message: '账号已注销' };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '注销失败，请稍后重试';
+          set({ isLoading: false, error: message });
+          return { success: false, message };
+        }
       },
 
       // 从后端同步最新用户信息，确保前后端一致

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, RefreshCw, LogOut, ChevronRight, Download, Upload, Bell, Trash2, Sun, Moon, Monitor } from 'lucide-react';
+import { User, RefreshCw, LogOut, ChevronRight, Download, Upload, Bell, Trash2, Sun, Moon, Monitor, UserX } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import GlassCard from '@/components/ui/GlassCard';
 import Button from '@/components/ui/Button';
@@ -17,7 +17,7 @@ import { importAllData, validateImportFile, ImportResult } from '@/utils/importD
 
 const Settings: React.FC = () => {
   const navigate = useNavigate();
-  const { currentUser, logout } = useAuthStore();
+  const { currentUser, logout, deleteAccount } = useAuthStore();
   const { days } = useDaysStore();
   const { notes } = useNotesStore();
   const { habits } = useHabitsStore();
@@ -28,6 +28,10 @@ const Settings: React.FC = () => {
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showDeleteAccountConfirm, setShowDeleteAccountConfirm] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteAccountError, setDeleteAccountError] = useState('');
   const [showImportConfirm, setShowImportConfirm] = useState(false);
   const [showImportResult, setShowImportResult] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -55,6 +59,29 @@ const Settings: React.FC = () => {
     logout();
     setShowLogoutConfirm(false);
     navigate('/login');
+  };
+
+  const handleDeleteAccount = async () => {
+    setIsDeletingAccount(true);
+    setDeleteAccountError('');
+    const result = await deleteAccount();
+    if (result.success) {
+      // 清除本地各 store 中当前用户的数据
+      const uid = currentUser?.uid;
+      if (uid) {
+        useDaysStore.setState({ days: [] });
+        useNotesStore.setState({ notes: [] });
+        useHabitsStore.setState({ habits: [] });
+        useMoodStore.setState({ moods: [] });
+        useCompanionStore.setState({ conversations: [], currentConversationId: null });
+      }
+      setShowDeleteAccountConfirm(false);
+      setDeleteConfirmText('');
+      navigate('/login');
+    } else {
+      setDeleteAccountError(result.message);
+    }
+    setIsDeletingAccount(false);
   };
 
   const handleExport = () => {
@@ -171,6 +198,18 @@ const Settings: React.FC = () => {
           label: '退出登录',
           desc: '退出当前账号',
           onClick: () => setShowLogoutConfirm(true),
+          danger: true,
+          hasArrow: true,
+        },
+        {
+          icon: UserX,
+          label: '注销账号',
+          desc: '永久删除账号及所有数据，不可恢复',
+          onClick: () => {
+            setShowDeleteAccountConfirm(true);
+            setDeleteConfirmText('');
+            setDeleteAccountError('');
+          },
           danger: true,
           hasArrow: true,
         },
@@ -354,6 +393,78 @@ const Settings: React.FC = () => {
             </Button>
             <Button variant="danger" onClick={handleLogout} className="flex-1">
               退出
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showDeleteAccountConfirm}
+        onClose={() => {
+          if (!isDeletingAccount) {
+            setShowDeleteAccountConfirm(false);
+            setDeleteConfirmText('');
+            setDeleteAccountError('');
+          }
+        }}
+        title="注销账号"
+      >
+        <div className="py-2">
+          <div className="text-center mb-5">
+            <div className="text-5xl mb-3">⚠️</div>
+            <p className="text-red-600 font-serif mb-2 font-bold text-lg">
+              此操作不可撤销！
+            </p>
+            <p className="text-amber-700 font-serif text-sm leading-relaxed dark:text-gray-400">
+              将永久删除你的账号以及所有日子、笔记、习惯、心情记录等数据，
+              删除后无法恢复。如确认注销，请在下方输入
+              <span className="text-red-600 font-semibold mx-1">确认注销</span>
+              后点击按钮。
+            </p>
+          </div>
+
+          <input
+            type="text"
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.target.value)}
+            placeholder='请输入"确认注销"'
+            disabled={isDeletingAccount}
+            className={`
+              w-full px-4 py-3 rounded-xl font-serif text-center
+              bg-amber-50/70 border border-amber-200
+              text-amber-900 placeholder:text-amber-400
+              focus:outline-none focus:ring-2 focus:ring-red-300 focus:border-transparent
+              dark:bg-[#0f3460]/30 dark:border-white/10 dark:text-gray-100 dark:placeholder:text-gray-500
+              ${deleteAccountError ? 'border-red-300' : ''}
+            `}
+          />
+
+          {deleteAccountError && (
+            <p className="text-red-500 font-serif text-sm mt-2 text-center">
+              {deleteAccountError}
+            </p>
+          )}
+
+          <div className="flex gap-3 mt-5">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowDeleteAccountConfirm(false);
+                setDeleteConfirmText('');
+                setDeleteAccountError('');
+              }}
+              className="flex-1"
+              disabled={isDeletingAccount}
+            >
+              取消
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleDeleteAccount}
+              className="flex-1"
+              disabled={deleteConfirmText !== '确认注销' || isDeletingAccount}
+            >
+              {isDeletingAccount ? '注销中...' : '永久注销账号'}
             </Button>
           </div>
         </div>
