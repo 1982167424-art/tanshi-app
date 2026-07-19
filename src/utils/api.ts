@@ -25,7 +25,7 @@ const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs = 1
 };
 
 // 请求封装：自动注入JWT，统一解包 data 字段
-async function request<T = unknown>(url: string, options?: RequestInit): Promise<T> {
+async function request<T = unknown>(url: string, options?: RequestInit, timeoutMs = 15000): Promise<T> {
   const token = getToken();
   let res: Response;
   try {
@@ -36,7 +36,7 @@ async function request<T = unknown>(url: string, options?: RequestInit): Promise
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options?.headers,
       },
-    });
+    }, timeoutMs);
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       throw new Error('请求超时，请检查网络后重试');
@@ -195,12 +195,12 @@ export const api = {
       request<{ response: string }>('/ai/chat', {
         method: 'POST',
         body: JSON.stringify({ message }),
-      }).then(d => d.response),
+      }, 60000).then(d => d.response),
     analysis: (moodData: unknown[]) =>
       request<{ analysis: unknown }>('/ai/analysis', {
         method: 'POST',
         body: JSON.stringify({ moodData }),
-      }).then(d => d.analysis),
+      }, 60000).then(d => d.analysis),
   },
 
   // 签到
