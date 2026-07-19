@@ -1,15 +1,17 @@
 /**
- * Cloudflare Turnstile 脚本加载器（国内 CDN 代理版）
+ * Cloudflare Turnstile 脚本加载器
  *
- * 核心思路：
- * 1. 通过 Vercel rewrite 将 challenges.cloudflare.com 代理到 /cf-turnstile/*（同源）
- * 2. 加载 api.js 前，monkey-patch iframe src，让 Turnstile 创建的 iframe 也走代理
- * 3. monkey-patch postMessage origin，让 api.js 的 origin 校验通过
- * 4. 国内手机无代理时也能加载验证组件
+ * 设计原则：
+ * - 快速失败：单次尝试 + 8s 超时，失败立即返回（不长时间转圈）
+ * - 手动重试：失败后由 UI 层显示重试按钮，不自动跳过验证
+ * - 官方 CDN：必须从 challenges.cloudflare.com 加载（脚本内部会自验证 src）
  *
- * 容错策略：
- * - 优先走同源代理（/cf-turnstile/），失败回退官方 CDN，再失败回退后端代理
- * - 每个源最多重试 3 次，间隔递增
+ * 关于 CDN 选择：
+ * Turnstile 脚本内部用正则 ^https://challenges.cloudflare.com/turnstile/v0/api.js
+ * 校验 <script> 标签的 src，任何第三方 CDN 或本地副本都会导致脚本抛出 43777 错误。
+ * 因此官方 CDN 是唯一可用源，无法替换为其他"优质 CDN"。
+ * Cloudflare 自身就是全球 CDN，textime.top 已走 Cloudflare 代理，
+ * 能访问 textime.top = 能访问 Cloudflare 边缘节点 = 能访问 challenges.cloudflare.com。
  */
 
 declare global {
@@ -24,217 +26,57 @@ declare global {
   }
 }
 
-const PROXY_BASE = '/cf-turnstile';
-const CF_ORIGIN = 'https://challenges.cloudflare.com';
+// Cloudflare Turnstile 官方 CDN（render=explicit：仅主动 render，避免自动扫描）
+const TURNSTILE_CDN_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+// 单次加载超时：8 秒（快速失败，不让用户长时间转圈）
+const SCRIPT_TIMEOUT_MS = 8000;
+// 脚本加载后 turnstile 对象初始化的等待时间
+const INIT_WAIT_MS = 2000;
 
-// 同源代理（Vercel rewrite → challenges.cloudflare.com）
-const PRIMARY_URL = `${PROXY_BASE}/turnstile/v0/api.js?render=explicit`;
-// 官方 CDN（有代理时直连）
-const SECONDARY_URL = `${CF_ORIGIN}/turnstile/v0/api.js?render=explicit`;
-
-const SCRIPT_TIMEOUT_MS = 12000;
-const MAX_RETRY = 3;
-const RETRY_DELAYS_MS = [1000, 2000, 3000];
-
-const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
-
-// ============ Monkey-patch: iframe src 重写 ============
-let patched = false;
-
-const installPatches = () => {
-  if (patched) return;
-  patched = true;
-
-  // 1. 拦截 iframe.src 属性赋值
-  const srcDescriptor = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'src');
-  if (srcDescriptor && srcDescriptor.set && srcDescriptor.get) {
-    const originalSet = srcDescriptor.set;
-    const originalGet = srcDescriptor.get;
-    Object.defineProperty(HTMLIFrameElement.prototype, 'src', {
-      set(this: HTMLIFrameElement, value: string) {
-        if (typeof value === 'string' && value.includes('challenges.cloudflare.com')) {
-          value = value.replace(CF_ORIGIN, PROXY_BASE);
-        }
-        originalSet.call(this, value);
-      },
-      get(this: HTMLIFrameElement) {
-        return originalGet.call(this);
-      },
-      configurable: true,
-    });
-  }
-
-  // 2. 拦截 setAttribute('src', ...)
-  const originalSetAttribute = Element.prototype.setAttribute;
-  Element.prototype.setAttribute = function (this: Element, name: string, value: string) {
-    if (
-      this instanceof HTMLIFrameElement &&
-      name.toLowerCase() === 'src' &&
-      typeof value === 'string' &&
-      value.includes('challenges.cloudflare.com')
-    ) {
-      value = value.replace(CF_ORIGIN, PROXY_BASE);
-    }
-    return originalSetAttribute.call(this, name, value);
-  };
-
-  // 3. MutationObserver: 捕获通过 innerHTML/insertAdjacentHTML 创建的 iframe
-  const observer = new MutationObserver((mutations) => {
-    for (const mutation of mutations) {
-      for (const node of mutation.addedNodes) {
-        if (node instanceof HTMLIFrameElement) {
-          rewriteIframeSrc(node);
-        }
-        if (node instanceof Element) {
-          node.querySelectorAll?.('iframe').forEach(rewriteIframeSrc);
-        }
-      }
-    }
-  });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
-
-  // 4. 拦截 postMessage origin 校验
-  //    iframe 走代理后 origin 变为当前页 origin，需伪装为 challenges.cloudflare.com
-  const originalAddEventListener = window.addEventListener.bind(window);
-  (window as any).addEventListener = function (
-    type: string,
-    listener: EventListenerOrEventListenerObject,
-    options?: boolean | AddEventListenerOptions
-  ) {
-    if (type === 'message') {
-      const wrapped = function (this: unknown, event: MessageEvent) {
-        if (event.origin === window.location.origin) {
-          try {
-            Object.defineProperty(event, 'origin', {
-              value: CF_ORIGIN,
-              configurable: true,
-            });
-          } catch {
-            // 如果不可配置就跳过
-          }
-        }
-        if (typeof listener === 'function') {
-          return (listener as (e: MessageEvent) => void)(event);
-        }
-        return (listener as EventListenerObject).handleEvent(event);
-      };
-      return originalAddEventListener(type, wrapped, options);
-    }
-    return originalAddEventListener(type, listener, options);
-  };
-};
-
-const rewriteIframeSrc = (iframe: HTMLIFrameElement) => {
-  const src = iframe.getAttribute('src');
-  if (src && src.includes('challenges.cloudflare.com')) {
-    iframe.setAttribute('src', src.replace(CF_ORIGIN, PROXY_BASE));
-  }
-};
-
-// ============ 脚本加载 ============
-
-// 通过 fetch 加载（跟随重定向），然后内联执行
-const loadScriptViaFetch = async (url: string): Promise<boolean> => {
-  try {
-    const response = await fetch(url, { redirect: 'follow' });
-    if (!response.ok) return false;
-    const text = await response.text();
-    if (!text || text.length < 100) return false;
-
-    const script = document.createElement('script');
-    script.textContent = text;
-    document.head.appendChild(script);
-
-    if (window.turnstile) return true;
-    return new Promise((resolve) => {
-      const check = setInterval(() => {
-        if (window.turnstile) {
-          clearInterval(check);
-          resolve(true);
-        }
-      }, 100);
-      setTimeout(() => {
-        clearInterval(check);
-        resolve(!!window.turnstile);
-      }, 3000);
-    });
-  } catch {
-    return false;
-  }
-};
-
-// 通过 <script> 标签加载（用于官方 CDN 直连）
-const loadScriptOnce = (url: string): Promise<boolean> => {
-  return new Promise((resolve) => {
-    const script = document.createElement('script');
-    script.src = url;
-    script.async = true;
-    script.defer = true;
-
-    const timeoutId = setTimeout(() => {
-      if (!window.turnstile) {
-        script.remove();
-        resolve(false);
-      }
-    }, SCRIPT_TIMEOUT_MS);
-
-    script.onload = () => {
-      clearTimeout(timeoutId);
-      if (window.turnstile) {
-        resolve(true);
-        return;
-      }
-      const check = setInterval(() => {
-        if (window.turnstile) {
-          clearInterval(check);
-          resolve(true);
-        }
-      }, 100);
-      setTimeout(() => {
-        clearInterval(check);
-        resolve(!!window.turnstile);
-      }, 3000);
-    };
-
-    script.onerror = () => {
-      clearTimeout(timeoutId);
-      script.remove();
-      resolve(false);
-    };
-
-    document.head.appendChild(script);
-  });
-};
-
-const loadWithRetry = async (url: string, useFetch: boolean): Promise<boolean> => {
-  for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
-    if (window.turnstile) return true;
-    const ok = useFetch ? await loadScriptViaFetch(url) : await loadScriptOnce(url);
-    if (ok && window.turnstile) return true;
-    if (attempt < MAX_RETRY - 1) {
-      await sleep(RETRY_DELAYS_MS[attempt]);
-    }
-  }
-  return false;
-};
-
-/**
- * 加载 Turnstile 脚本
- * 1. 同源代理（国内可用） → 2. 官方 CDN（有代理可用） → 3. 全部失败返回 false
- */
 export const loadTurnstile = async (): Promise<boolean> => {
   if (window.turnstile) return true;
 
-  // 安装 monkey-patch（仅一次）
-  installPatches();
+  return new Promise((resolve) => {
+    const script = document.createElement('script');
+    script.src = TURNSTILE_CDN_URL;
+    script.async = true;
+    script.defer = true;
 
-  // 源 1：同源代理（Vercel rewrite → challenges.cloudflare.com，fetch 跟随重定向）
-  if (await loadWithRetry(PRIMARY_URL, true)) return true;
+    let settled = false;
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeoutId);
+      clearInterval(checkInterval);
+      if (!ok) script.remove();
+      resolve(ok);
+    };
 
-  // 源 2：官方 CDN（用户开了代理时可用，script 标签直连）
-  if (await loadWithRetry(SECONDARY_URL, false)) return true;
+    // 单次超时：8 秒后快速失败
+    const timeoutId = setTimeout(() => {
+      finish(!!window.turnstile);
+    }, SCRIPT_TIMEOUT_MS);
 
-  return false;
+    // 轮询检查 turnstile 对象（脚本加载后可能需要一点时间初始化）
+    const checkInterval = setInterval(() => {
+      if (window.turnstile) finish(true);
+    }, 100);
+
+    script.onload = () => {
+      if (window.turnstile) {
+        finish(true);
+      } else {
+        // 脚本已加载，给 2 秒让 turnstile 对象初始化
+        setTimeout(() => finish(!!window.turnstile), INIT_WAIT_MS);
+      }
+    };
+
+    script.onerror = () => {
+      finish(false);
+    };
+
+    document.head.appendChild(script);
+  });
 };
 
 export const getTurnstileTheme = (): 'light' | 'dark' => {
