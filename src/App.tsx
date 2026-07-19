@@ -16,6 +16,7 @@ import Days from '@/pages/Days';
 import Notes from '@/pages/Notes';
 import Habits from '@/pages/Habits';
 import Mood from '@/pages/Mood';
+import Alarm from '@/pages/Alarm';
 import Companion from '@/pages/Companion';
 import Profile from '@/pages/Profile';
 import Settings from '@/pages/Settings';
@@ -140,10 +141,18 @@ const App: React.FC = () => {
         }
 
         if (shouldNotify) {
-          new Notification('探时 - 习惯打卡提醒', {
-            body: `该打卡【${reminder.habitName}】啦～`,
-            icon: '/favicon.ico',
-          });
+          // 区分习惯提醒(有habitId)和独立闹钟(无habitId)
+          if (reminder.habitId) {
+            new Notification('探时 - 习惯打卡提醒', {
+              body: `该打卡【${reminder.habitName}】啦～`,
+              icon: '/favicon.ico',
+            });
+          } else {
+            new Notification('⏰ 探时 - 闹钟提醒', {
+              body: reminder.habitName || '闹钟时间到了',
+              icon: '/favicon.ico',
+            });
+          }
           notifiedTodayRef.current.add(notifyKey);
         }
       });
@@ -167,6 +176,7 @@ const App: React.FC = () => {
           <Route path="notes" element={<Notes />} />
           <Route path="habits" element={<Habits />} />
           <Route path="mood" element={<Mood />} />
+          <Route path="alarm" element={<Alarm />} />
           <Route path="profile" element={<Profile />} />
           <Route path="settings" element={<Settings />} />
           <Route path="search" element={<Search />} />
