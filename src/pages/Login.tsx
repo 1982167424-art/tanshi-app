@@ -49,8 +49,7 @@ const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    // Turnstile 加载失败时允许跳过验证（国内无代理兜底）
-    if (!turnstileToken && !widgetFailed) { setError('请先完成人机验证'); return; }
+    if (!turnstileToken) { setError('请先完成人机验证'); return; }
     if (accessCode.trim() && (!username.trim() || !password)) { setError('填写访问口令时，用户名和密码也必须填写'); return; }
     setLoading(true);
     try {
@@ -80,7 +79,7 @@ const Login: React.FC = () => {
               {widgetReady && <div ref={turnstileRef} />}
               {widgetFailed && (
                 <div className="flex flex-col items-center gap-2">
-                  <p className="text-amber-600 text-xs dark:text-amber-400">验证组件加载失败，可直接登录</p>
+                  <p className="text-amber-600 text-xs dark:text-amber-400">验证组件加载失败，请检查网络后重试</p>
                   <button type="button" onClick={handleRetry} className="text-amber-500 text-xs underline hover:text-amber-600">点击重试</button>
                 </div>
               )}
@@ -91,7 +90,7 @@ const Login: React.FC = () => {
               )}
             </div>
             {error && <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-sm font-serif text-center dark:bg-red-900/20 dark:border-red-900/30">{error}</div>}
-            <Button type="submit" className="w-full" size="lg" disabled={loading || (!turnstileToken && !widgetFailed)}>{loading ? '登录中...' : '登 录'}</Button>
+            <Button type="submit" className="w-full" size="lg" disabled={loading || !turnstileToken}>{loading ? '登录中...' : '登 录'}</Button>
           </form>
           <div className="mt-6 text-center">
             <p className="text-amber-700 font-serif dark:text-gray-400">还没有账号？<Link to="/register" className="text-amber-600 hover:text-amber-800 font-semibold ml-1 transition-colors dark:text-amber-400 dark:hover:text-amber-300">立即注册</Link></p>
