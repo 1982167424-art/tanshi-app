@@ -4,8 +4,9 @@
   "framework": "vite",
   "rewrites": [
     { "source": "/cf-turnstile/:path*", "destination": "https://challenges.cloudflare.com/:path*" },
+    { "source": "/turnstile/:path*", "destination": "https://challenges.cloudflare.com/turnstile/:path*" },
     { "source": "/api/:path*", "destination": "https://api.textime.top/api/:path*" },
-    { "source": "/((?!api|cf-turnstile).*)", "destination": "/" }
+    { "source": "/((?!api|cf-turnstile|turnstile).*)", "destination": "/" }
   ],
   "headers": [
     {

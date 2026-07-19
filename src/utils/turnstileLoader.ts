@@ -133,6 +133,37 @@ const rewriteIframeSrc = (iframe: HTMLIFrameElement) => {
 
 // ============ 脚本加载 ============
 
+// 通过 fetch 加载（跟随重定向），然后内联执行
+const loadScriptViaFetch = async (url: string): Promise<boolean> => {
+  try {
+    const response = await fetch(url, { redirect: 'follow' });
+    if (!response.ok) return false;
+    const text = await response.text();
+    if (!text || text.length < 100) return false;
+
+    const script = document.createElement('script');
+    script.textContent = text;
+    document.head.appendChild(script);
+
+    if (window.turnstile) return true;
+    return new Promise((resolve) => {
+      const check = setInterval(() => {
+        if (window.turnstile) {
+          clearInterval(check);
+          resolve(true);
+        }
+      }, 100);
+      setTimeout(() => {
+        clearInterval(check);
+        resolve(!!window.turnstile);
+      }, 3000);
+    });
+  } catch {
+    return false;
+  }
+};
+
+// 通过 <script> 标签加载（用于官方 CDN 直连）
 const loadScriptOnce = (url: string): Promise<boolean> => {
   return new Promise((resolve) => {
     const script = document.createElement('script');
@@ -175,10 +206,10 @@ const loadScriptOnce = (url: string): Promise<boolean> => {
   });
 };
 
-const loadWithRetry = async (url: string): Promise<boolean> => {
+const loadWithRetry = async (url: string, useFetch: boolean): Promise<boolean> => {
   for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
     if (window.turnstile) return true;
-    const ok = await loadScriptOnce(url);
+    const ok = useFetch ? await loadScriptViaFetch(url) : await loadScriptOnce(url);
     if (ok && window.turnstile) return true;
     if (attempt < MAX_RETRY - 1) {
       await sleep(RETRY_DELAYS_MS[attempt]);
@@ -197,11 +228,11 @@ export const loadTurnstile = async (): Promise<boolean> => {
   // 安装 monkey-patch（仅一次）
   installPatches();
 
-  // 源 1：同源代理（Vercel rewrite → challenges.cloudflare.com）
-  if (await loadWithRetry(PRIMARY_URL)) return true;
+  // 源 1：同源代理（Vercel rewrite → challenges.cloudflare.com，fetch 跟随重定向）
+  if (await loadWithRetry(PRIMARY_URL, true)) return true;
 
-  // 源 2：官方 CDN（用户开了代理时可用）
-  if (await loadWithRetry(SECONDARY_URL)) return true;
+  // 源 2：官方 CDN（用户开了代理时可用，script 标签直连）
+  if (await loadWithRetry(SECONDARY_URL, false)) return true;
 
   return false;
 };
