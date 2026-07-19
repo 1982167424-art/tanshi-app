@@ -3,8 +3,9 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "rewrites": [
+    { "source": "/cf-turnstile/:path*", "destination": "https://challenges.cloudflare.com/:path*" },
     { "source": "/api/:path*", "destination": "https://api.textime.top/api/:path*" },
-    { "source": "/((?!api).*)", "destination": "/" }
+    { "source": "/((?!api|cf-turnstile).*)", "destination": "/" }
   ],
   "headers": [
     {
@@ -17,7 +18,7 @@
         { "key": "X-XSS-Protection", "value": "1; mode=block" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=()" },
-        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.textime.top https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; base-uri 'self'; form-action 'self';" },
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' https://api.textime.top https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com; base-uri 'self'; form-action 'self';" },
         { "key": "Access-Control-Allow-Origin", "value": "https://textime.top" }
       ]
     },
