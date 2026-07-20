@@ -32,6 +32,7 @@
 - 最终方案：`vercel pull --yes` → `vercel build --prod` → `vercel deploy --prod --prebuilt --yes`（本地构建后直接上传，跳过 Vercel build cache）
 - vercel.json HTML 缓存改为 `max-age=0, s-maxage=0, must-revalidate`（原 s-maxage=300 导致部署后 HTML 被 CDN 缓存 5 分钟）
 - **以后部署流程**：先 git commit + push，再用 prebuilt 模式部署（vercel build + vercel deploy --prebuilt），不要直接 vercel --prod
+- **Vercel CLI 代理**：Node.js 22 的 undici 默认不读 HTTP_PROXY/HTTPS_PROXY，需加 `NODE_USE_ENV_PROXY=1` 才能走代理。完整命令：`NODE_USE_ENV_PROXY=1 HTTPS_PROXY=http://127.0.0.1:1082 npx vercel deploy --prod --prebuilt --yes`
 
 ## 后端部署（Railway）
 - Railway 项目名：tanshi-backend-api，用 `railway link --project tanshi-backend-api --environment production` 连接

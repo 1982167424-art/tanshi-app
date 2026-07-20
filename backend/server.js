@@ -114,10 +114,10 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
-// 认证接口严格限制（防暴力破解）：每IP每15分钟5次
+// 认证接口限制（防暴力破解）：每IP每15分钟20次
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 20,
   keyGenerator: (req) => getClientIp(req),
   skip: (req) => req.method === 'OPTIONS',
   message: { success: false, message: '登录/注册请求过于频繁，请15分钟后再试' },

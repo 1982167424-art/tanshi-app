@@ -20,10 +20,10 @@ const getIp = (req) => {
 const register = async (req, res, next) => {
   try {
     const { username, password, birthday, turnstileToken } = req.body;
-    // Turnstile 可选：有 token 则验证，无 token 跳过（国内无代理时 Turnstile 无法加载）
+    // Turnstile 可选：有 token 则验证，验证失败降级放行（国内代理模式下 token 可能异常）
     if (turnstileToken) {
       const tr = await verifyTurnstileToken(turnstileToken);
-      if (!tr.valid) return fail(res, tr.message, 403);
+      if (!tr.valid) console.warn(`[Turnstile] 注册验证降级放行: ${tr.message}`, tr.errors || '');
     }
 
     // 同一 IP 只能注册一个账号
@@ -45,10 +45,10 @@ const register = async (req, res, next) => {
 const login = async (req, res, next) => {
   try {
     const { username, password, accessCode, turnstileToken } = req.body;
-    // Turnstile 可选：有 token 则验证，无 token 跳过（国内无代理时 Turnstile 无法加载）
+    // Turnstile 可选：有 token 则验证，验证失败降级放行（国内代理模式下 token 可能异常）
     if (turnstileToken) {
       const tr = await verifyTurnstileToken(turnstileToken);
-      if (!tr.valid) return fail(res, tr.message, 403);
+      if (!tr.valid) console.warn(`[Turnstile] 登录验证降级放行: ${tr.message}`, tr.errors || '');
     }
 
     const user = await authService.loginUser(username, password, accessCode);
