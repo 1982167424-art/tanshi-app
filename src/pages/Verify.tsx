@@ -4,7 +4,6 @@ import { loadTurnstile, getTurnstileTheme } from '../utils/turnstileLoader';
 
 // 跳过验证的安全策略
 const SKIP_COOLDOWN_MS = 60 * 60 * 1000; // 1 小时内只能跳过一次
-const SKIP_TIMEOUT_MS = 30_000;           // Turnstile 等待 30 秒后才显示跳过按钮
 
 const getSkipRecord = (): number | null => {
   const t = sessionStorage.getItem('tanshi_skip_at');
@@ -17,7 +16,7 @@ const setSkipRecord = () => {
 
 const checkSkipCooldown = (): boolean => {
   const lastSkip = getSkipRecord();
-  if (!lastSkip) return true; // 从未跳过，允许
+  if (!lastSkip) return true;
   return Date.now() - lastSkip > SKIP_COOLDOWN_MS;
 };
 
@@ -27,15 +26,13 @@ const Verify: React.FC = () => {
   const from = (location.state as any)?.from?.pathname || '/login';
   const turnstileRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string>('');
-  const skipTimerRef = useRef<number>(0);
   const countdownRef = useRef<number>(0);
   const [status, setStatus] = useState<'loading' | 'verifying' | 'success' | 'error'>('loading');
   const [loadFailed, setLoadFailed] = useState(false);
   const [scriptReady, setScriptReady] = useState(false);
-  const [showSkip, setShowSkip] = useState(false);        // 30s 超时后显示跳过按钮
-  const [skipConfirming, setSkipConfirming] = useState(false); // 二次确认防误触
-  const [skipCountdown, setSkipCountdown] = useState(0);   // 确认倒计时
-  const [skipBlocked, setSkipBlocked] = useState(false);   // 冷却期内被拦截
+  const [skipConfirming, setSkipConfirming] = useState(false);
+  const [skipCountdown, setSkipCountdown] = useState(0);
+  const [skipBlocked, setSkipBlocked] = useState(false);
   const [skipCooldownRemaining, setSkipCooldownRemaining] = useState('');
   const [rayId] = useState(() => {
     const chars = '0123456789abcdef';
@@ -44,7 +41,20 @@ const Verify: React.FC = () => {
     return id;
   });
 
-  // 第一步：加载脚本
+  // 页面加载时检查冷却期
+  useEffect(() => {
+    const lastSkip = getSkipRecord();
+    if (lastSkip) {
+      const remaining = SKIP_COOLDOWN_MS - (Date.now() - lastSkip);
+      if (remaining > 0) {
+        setSkipBlocked(true);
+        const min = Math.ceil(remaining / 60000);
+        setSkipCooldownRemaining(min > 1 ? `${min} 分钟` : '不到 1 分钟');
+      }
+    }
+  }, []);
+
+  // 加载 Turnstile 脚本
   useEffect(() => {
     const loadScript = async () => {
       const success = await loadTurnstile();
@@ -57,40 +67,22 @@ const Verify: React.FC = () => {
     loadScript();
   }, []);
 
-  // 第二步：脚本就绪后渲染 widget
+  // 脚本就绪后渲染 widget
   useEffect(() => {
     if (!scriptReady || !turnstileRef.current || widgetIdRef.current) return;
     if (!window.turnstile) return;
 
     setStatus('verifying');
 
-    // 30 秒超时计时器
-    skipTimerRef.current = window.setTimeout(() => {
-      setShowSkip(true);
-      // 计算冷却期剩余时间
-      const lastSkip = getSkipRecord();
-      if (lastSkip) {
-        const remaining = SKIP_COOLDOWN_MS - (Date.now() - lastSkip);
-        if (remaining > 0) {
-          setSkipBlocked(true);
-          const min = Math.ceil(remaining / 60000);
-          setSkipCooldownRemaining(min > 1 ? `${min} 分钟` : '不到 1 分钟');
-        }
-      }
-    }, SKIP_TIMEOUT_MS);
-
     widgetIdRef.current = window.turnstile.render(turnstileRef.current, {
       sitekey: import.meta.env.VITE_TURNSTILE_SITE_KEY || '0x4AAAAAAD1vYyHUN3U7Rkdz',
       callback: (token: string) => {
-        // 验证成功，清理计时器
-        if (skipTimerRef.current) clearTimeout(skipTimerRef.current);
         setStatus('success');
         sessionStorage.setItem('turnstile_verified', 'true');
         sessionStorage.setItem('turnstile_token', token);
         setTimeout(() => navigate(from, { replace: true }), 500);
       },
       errorCallback: () => {
-        if (skipTimerRef.current) clearTimeout(skipTimerRef.current);
         setStatus('error');
       },
       theme: getTurnstileTheme(),
@@ -99,8 +91,6 @@ const Verify: React.FC = () => {
 
   // 重试
   const handleRetry = useCallback(() => {
-    if (skipTimerRef.current) clearTimeout(skipTimerRef.current);
-    setShowSkip(false);
     setSkipConfirming(false);
     widgetIdRef.current = '';
     setScriptReady(false);
@@ -115,9 +105,8 @@ const Verify: React.FC = () => {
     });
   }, []);
 
-  // 跳过验证 —— 第一步：按"继续访问"，弹出二次确认
+  // 跳过验证 —— 第一步：点击"跳过验证"
   const handleSkipRequest = useCallback(() => {
-    // 检查冷却期
     if (!checkSkipCooldown()) {
       setSkipBlocked(true);
       const remaining = SKIP_COOLDOWN_MS - (Date.now() - getSkipRecord()!);
@@ -125,7 +114,6 @@ const Verify: React.FC = () => {
       setSkipCooldownRemaining(min > 1 ? `${min} 分钟` : '不到 1 分钟');
       return;
     }
-    // 进入二次确认 + 倒计时
     setSkipConfirming(true);
     setSkipCountdown(5);
     let count = 5;
@@ -144,11 +132,10 @@ const Verify: React.FC = () => {
     if (countdownRef.current) clearInterval(countdownRef.current);
   }, []);
 
-  // 跳过验证 —— 第二步：确认后放行
+  // 确认跳过
   const handleSkipConfirm = useCallback(() => {
-    if (skipCountdown > 0) return; // 倒计时未结束
+    if (skipCountdown > 0) return;
     if (countdownRef.current) clearInterval(countdownRef.current);
-    if (skipTimerRef.current) clearTimeout(skipTimerRef.current);
     setSkipRecord();
     sessionStorage.setItem('turnstile_verified', 'true');
     navigate(from, { replace: true });
@@ -157,7 +144,6 @@ const Verify: React.FC = () => {
   // 清理
   useEffect(() => {
     return () => {
-      if (skipTimerRef.current) clearTimeout(skipTimerRef.current);
       if (countdownRef.current) clearInterval(countdownRef.current);
       if (widgetIdRef.current && window.turnstile) {
         window.turnstile.reset(widgetIdRef.current);
@@ -165,9 +151,12 @@ const Verify: React.FC = () => {
     };
   }, []);
 
+  // 是否显示跳过入口（所有非成功状态都显示）
+  const canSkip = status !== 'success' && !skipConfirming;
+
   return (
     <div className="min-h-screen bg-white dark:bg-gray-900 flex flex-col">
-      <div className="flex-1 flex flex-col items-center justify-center px-6">
+      <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6">
         <div className="w-full max-w-md">
           <h1 className="text-5xl font-normal text-gray-800 dark:text-gray-100 mb-4 tracking-tight">
             textime.top
@@ -177,11 +166,11 @@ const Verify: React.FC = () => {
             {status === 'success' ? '验证通过' : '正在进行安全验证'}
           </h2>
 
-          <p className="text-gray-600 dark:text-gray-400 text-base mb-10 leading-relaxed">
+          <p className="text-gray-600 dark:text-gray-400 text-base mb-8 leading-relaxed">
             本网站使用安全服务防护恶意自动程序。在验证您不是自动程序期间，将显示此页面。
           </p>
 
-          {/* 容器始终存在，用 CSS 控制显隐 */}
+          {/* Turnstile 区域 */}
           <div className="mb-4">
             {status === 'loading' && (
               <div className="flex justify-center items-center py-6">
@@ -196,12 +185,12 @@ const Verify: React.FC = () => {
 
           {/* 脚本加载失败 */}
           {loadFailed && (
-            <div className="flex flex-col items-center gap-3 py-6">
+            <div className="flex flex-col items-center gap-3 py-4">
               <p className="text-amber-600 dark:text-amber-400 font-serif">验证组件加载失败</p>
               <p className="text-gray-500 dark:text-gray-400 text-xs">可能是网络原因导致验证服务无法加载，请检查网络后重试</p>
               <button
                 onClick={handleRetry}
-                className="text-amber-500 hover:text-amber-600 font-serif text-sm underline dark:text-amber-400 mt-2"
+                className="text-amber-500 hover:text-amber-600 font-serif text-sm underline dark:text-amber-400"
               >
                 点击重试
               </button>
@@ -215,34 +204,36 @@ const Verify: React.FC = () => {
             </div>
           )}
 
-          {/* 30 秒超时 —— 显示跳过出口 */}
-          {showSkip && status === 'verifying' && !skipConfirming && (
+          {/* 跳过验证入口 —— loading / loadFailed / verifying / error 均显示 */}
+          {canSkip && (
             <div className="mt-6 p-5 rounded-xl border border-amber-200 bg-amber-50/80 dark:border-amber-800 dark:bg-amber-900/20">
-              <p className="text-amber-800 font-serif text-sm mb-3 dark:text-amber-200">
-                ⏳ 验证组件加载超时（30秒以上）
+              <p className="text-amber-800 font-serif text-sm mb-2 dark:text-amber-200">
+                ⚡ 无法完成验证？
               </p>
               <p className="text-amber-600 text-xs mb-4 dark:text-amber-400">
                 {skipBlocked
-                  ? `您已在${skipCooldownRemaining}前使用过跳过验证，请等待冷却时间结束后再试，或通过验证组件完成验证。`
-                  : '可能是网络不稳定导致验证服务无法完成。您可以选择跳过验证继续访问，但为确保安全，本功能设有使用频率限制。'}
+                  ? `您已在${skipCooldownRemaining}前使用过跳过验证，请等待冷却时间结束后再试，或通过上方验证组件完成验证。`
+                  : '如验证组件无法正常加载或完成，您可以跳过验证直接进入登录页。为确保安全，每 1 小时只能跳过一次。'}
               </p>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleRetry}
-                  className="px-4 py-2 text-amber-600 hover:text-amber-700 font-serif text-sm underline dark:text-amber-400"
-                >
-                  重新加载
-                </button>
+              <div className="flex items-center gap-3 flex-wrap">
+                {(loadFailed || status === 'error') && (
+                  <button
+                    onClick={handleRetry}
+                    className="px-4 py-2 text-amber-600 hover:text-amber-700 font-serif text-sm underline dark:text-amber-400"
+                  >
+                    重新加载
+                  </button>
+                )}
                 <button
                   onClick={handleSkipRequest}
                   disabled={skipBlocked}
                   className={`px-5 py-2 rounded-lg font-serif text-sm transition-all ${
                     skipBlocked
                       ? 'bg-gray-200 text-gray-400 cursor-not-allowed dark:bg-gray-700 dark:text-gray-500'
-                      : 'bg-amber-500 text-white hover:bg-amber-600 shadow-sm'
+                      : 'bg-amber-500 text-white hover:bg-amber-600 active:bg-amber-700 shadow-sm'
                   }`}
                 >
-                  继续访问
+                  跳过验证
                 </button>
               </div>
             </div>
@@ -275,7 +266,7 @@ const Verify: React.FC = () => {
                   </button>
                   <button
                     onClick={handleSkipConfirm}
-                    className="flex-1 py-2.5 rounded-xl bg-amber-500 text-white font-serif hover:bg-amber-600 transition-colors shadow-sm"
+                    className="flex-1 py-2.5 rounded-xl bg-amber-500 text-white font-serif hover:bg-amber-600 active:bg-amber-700 transition-colors shadow-sm"
                   >
                     确认跳过
                   </button>
