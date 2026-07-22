@@ -137,3 +137,109 @@ export interface UserTitle {
   is_permanent: boolean;
   unlocked_at: string;
 }
+
+// ============ 社交功能 ============
+
+export interface FriendRequest {
+  id: string;
+  from_uid: string;
+  to_uid: string;
+  reason: string;
+  reply: string;
+  permission: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  created_at: string;
+  username?: string;
+  avatar?: string;
+}
+
+export interface Friend {
+  friend_uid: string;
+  permission: string;
+  created_at: string;
+  username: string;
+  avatar: string;
+}
+
+export interface UserProfile {
+  uid: string;
+  username: string;
+  avatar: string;
+  createdAt: string;
+}
+
+// ============ 空间（朋友圈） ============
+
+export interface Post {
+  id: string;
+  user_uid: string;
+  content: string;
+  images: string[];
+  video: string;
+  visibility: 'all' | 'friends' | 'private';
+  created_at: string;
+  updated_at: string;
+  username: string;
+  avatar: string;
+  likeCount: number;
+  commentCount: number;
+  liked: boolean;
+}
+
+export interface PostComment {
+  id: string;
+  post_id: string;
+  user_uid: string;
+  content: string;
+  created_at: string;
+  username: string;
+  avatar: string;
+}
+
+// ============ 状态 ============
+
+export interface Status {
+  id: string;
+  user_uid: string;
+  content: string;
+  emoji: string;
+  background: string;
+  expires_at: string;
+  created_at: string;
+  username: string;
+  avatar: string;
+  isExpired: boolean;
+}
+
+// ============ 好友聊天 ============
+
+export interface FriendMessage {
+  id: string;
+  from_uid: string;
+  to_uid: string;
+  content: string;
+  msg_type: 'text' | 'image' | 'video' | 'file' | 'location' | 'redpacket' | 'transfer' | 'music' | 'favorite';
+  extra: Record<string, unknown>;
+  created_at: string;
+  username: string;
+  avatar: string;
+}
+
+export interface FriendProfile {
+  uid: string;
+  username: string;
+  avatar: string;
+  createdAt: string;
+  isFriend: boolean;
+}
+
+export interface Favorite {
+  id: string;
+  fav_type: string;
+  fav_id: string;
+  title: string;
+  subtitle: string;
+  url: string;
+  icon: string;
+  created_at: string;
+}

@@ -36,3 +36,42 @@ export const quickTopics = [
   { emoji: '🔥', label: '需要鼓励', text: '我需要一些鼓励' },
   { emoji: '🍀', label: '身体不舒服', text: '我身体有点不舒服' },
 ];
+
+// 根据对话上下文生成 AI 提示建议
+export const getAISuggestions = (messages: { role: string; content: string }[]): string[] => {
+  if (messages.length === 0) return [];
+
+  const lastMsg = messages[messages.length - 1];
+  if (!lastMsg || lastMsg.role !== 'ai') return [];
+
+  const text = lastMsg.content;
+
+  // 根据 AI 回复内容生成相关建议
+  if (/难过|伤心|低落|不开心/.test(text)) {
+    return ['想聊聊原因吗？', '有什么我能帮你的？', '试试做点开心的事吧'];
+  }
+  if (/开心|快乐|高兴|太好了/.test(text)) {
+    return ['还想分享更多吗？', '最近还有什么开心事？', '一起想想明天的计划'];
+  }
+  if (/压力|焦虑|紧张|担心/.test(text)) {
+    return ['深呼吸一下', '聊聊压力来源', '给自己放个假吧'];
+  }
+  if (/累|疲惫|辛苦/.test(text)) {
+    return ['今天早点休息', '聊聊你在忙什么', '给自己充充电'];
+  }
+  if (/迷茫|不确定|犹豫/.test(text)) {
+    return ['说说你的想法', '你最想要什么？', '先迈出一小步试试'];
+  }
+  if (/睡|失眠|梦/.test(text)) {
+    return ['试试冥想放松', '聊聊今天做了什么', '明天有什么期待的？'];
+  }
+  if (/感谢|谢谢/.test(text)) {
+    return ['你还想感谢谁？', '你也很棒呀', '继续分享温暖的事'];
+  }
+  if (/鼓励|加油/.test(text)) {
+    return ['我相信你可以的', '你已经做得很好了', '今天给自己一个小奖励'];
+  }
+
+  // 默认建议
+  return ['继续聊聊', '你今天感觉怎么样？', '说说你最近的事'];
+};

@@ -4,12 +4,28 @@ import { User } from '@/types';
 import { isFourteenBirthdayPassed } from '@/utils/date';
 import { api } from '@/utils/api';
 
+// 启动时同步检查 token 是否存在，如果 currentUser 存在但 token 不存在则清除
+const checkTokenOnLoad = () => {
+  const token = sessionStorage.getItem('tanshi_token');
+  const authData = localStorage.getItem('tanshi-auth');
+  if (authData) {
+    try {
+      const parsed = JSON.parse(authData);
+      if (parsed?.state?.currentUser && !token) {
+        // token 丢失，清除登录状态
+        localStorage.removeItem('tanshi-auth');
+      }
+    } catch {}
+  }
+};
+checkTokenOnLoad();
+
 interface AuthState {
   currentUser: User | null;
   isLoading: boolean;
   error: string | null;
-  login: (username: string, password: string, accessCode?: string, turnstileToken?: string) => Promise<{ success: boolean; message: string }>;
-  register: (username: string, password: string, birthday: string, turnstileToken?: string) => Promise<{ success: boolean; message: string; uid?: string; accessCode?: string }>;
+  login: (username: string, password: string, accessCode?: string, turnstileToken?: string, turnstileRandstr?: string) => Promise<{ success: boolean; message: string }>;
+  register: (username: string, password: string, birthday: string, turnstileToken?: string, turnstileRandstr?: string, phone?: string, smsCode?: string) => Promise<{ success: boolean; message: string; uid?: string; accessCode?: string }>;
   logout: () => void;
   deleteAccount: () => Promise<{ success: boolean; message: string }>;
   updateUser: (updates: Partial<User>) => Promise<void>;
@@ -52,10 +68,10 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       error: null,
 
-      login: async (username: string, password: string, accessCode?: string, turnstileToken?: string) => {
+      login: async (username: string, password: string, accessCode?: string, turnstileToken?: string, turnstileRandstr?: string) => {
         set({ isLoading: true, error: null });
         try {
-          const data = await api.auth.login(username, password, accessCode, turnstileToken);
+          const data = await api.auth.login(username, password, accessCode, turnstileToken, turnstileRandstr);
           api.setToken(data.token);
           set({ currentUser: data.user as User, isLoading: false });
           get().checkTeenModeAge();
@@ -67,7 +83,7 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      register: async (username: string, password: string, birthday: string, turnstileToken?: string) => {
+      register: async (username: string, password: string, birthday: string, turnstileToken?: string, turnstileRandstr?: string, phone?: string, smsCode?: string) => {
         if (!username.trim()) {
           return { success: false, message: '用户名不能为空' };
         }
@@ -81,7 +97,7 @@ export const useAuthStore = create<AuthState>()(
 
         set({ isLoading: true, error: null });
         try {
-          const data = await api.auth.register(username, password, birthday, turnstileToken);
+          const data = await api.auth.register(username, password, birthday, turnstileToken, turnstileRandstr, phone, smsCode);
           api.setToken(data.token);
           api.removeToken();
           set({ currentUser: null, isLoading: false });

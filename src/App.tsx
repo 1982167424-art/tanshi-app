@@ -10,7 +10,7 @@ import { API_BASE } from '@/utils/api';
 import Layout from '@/components/Layout/Layout';
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
-import Verify from '@/pages/Verify';
+import OAuthCallback from '@/pages/OAuthCallback';
 import Home from '@/pages/Home';
 import Days from '@/pages/Days';
 import Notes from '@/pages/Notes';
@@ -21,26 +21,28 @@ import Profile from '@/pages/Profile';
 import Settings from '@/pages/Settings';
 import Search from '@/pages/Search';
 import Trash from '@/pages/Trash';
+import Friends from '@/pages/Friends';
+import UserProfile from '@/pages/UserProfile';
+import QRScan from '@/pages/QRScan';
+import MyQRCode from '@/pages/MyQRCode';
+import Space from '@/pages/Space';
+import StatusPage from '@/pages/StatusPage';
+import Chat from '@/pages/Chat';
+import Favorites from '@/pages/Favorites';
 
 const PrivateRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser } = useAuthStore();
   if (!currentUser) {
-    return <Navigate to="/verify" replace state={{ from: { pathname: '/login' } }} />;
+    return <Navigate to="/login" replace />;
   }
   return <>{children}</>;
 };
 
 const AuthRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser } = useAuthStore();
-  const location = useLocation();
 
   if (currentUser) {
     return <Navigate to="/" replace />;
-  }
-
-  const verified = sessionStorage.getItem('turnstile_verified');
-  if (!verified) {
-    return <Navigate to="/verify" replace state={{ from: location }} />;
   }
 
   return <>{children}</>;
@@ -165,9 +167,9 @@ const App: React.FC = () => {
   return (
     <Router>
       <Routes>
-        <Route path="/verify" element={<Verify />} />
         <Route path="/login" element={<AuthRoute><Login /></AuthRoute>} />
         <Route path="/register" element={<AuthRoute><Register /></AuthRoute>} />
+        <Route path="/auth/callback/:provider" element={<OAuthCallback />} />
         
         <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
           <Route index element={<Home />} />
@@ -180,6 +182,14 @@ const App: React.FC = () => {
           <Route path="search" element={<Search />} />
           <Route path="trash" element={<Trash />} />
           <Route path="companion" element={<Companion />} />
+          <Route path="friends" element={<Friends />} />
+          <Route path="friends/scan" element={<QRScan />} />
+          <Route path="friends/qrcode" element={<MyQRCode />} />
+          <Route path="user/:uid" element={<UserProfile />} />
+          <Route path="space" element={<Space />} />
+          <Route path="status" element={<StatusPage />} />
+          <Route path="chat/:friendUid" element={<Chat />} />
+          <Route path="favorites" element={<Favorites />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

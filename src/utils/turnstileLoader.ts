@@ -1,80 +1,88 @@
 /**
- * Cloudflare Turnstile 脚本加载器
+ * 阿里云验证码 2.0 (SmartCaptcha) 加载器
  *
- * 设计原则：
- * - 快速失败：单次尝试 + 8s 超时，失败立即返回（不长时间转圈）
- * - 手动重试：失败后由 UI 层显示重试按钮，不自动跳过验证
- * - 官方 CDN：必须从 challenges.cloudflare.com 加载（脚本内部会自验证 src）
- *
- * 关于 CDN 选择：
- * Turnstile 脚本内部用正则 ^https://challenges.cloudflare.com/turnstile/v0/api.js
- * 校验 <script> 标签的 src，任何第三方 CDN 或本地副本都会导致脚本抛出 43777 错误。
- * 因此官方 CDN 是唯一可用源，无法替换为其他"优质 CDN"。
- * Cloudflare 自身就是全球 CDN，textime.top 已走 Cloudflare 代理，
- * 能访问 textime.top = 能访问 Cloudflare 边缘节点 = 能访问 challenges.cloudflare.com。
+ * SDK: https://o.alicdn.com/captcha-frontend/aliyunCaptcha/AliyunCaptcha.js
+ * 接入方式: window.AliyunCaptchaConfig + window.initAliyunCaptcha
  */
 
 declare global {
   interface Window {
+    AliyunCaptchaConfig?: { region: string; prefix: string };
+    initAliyunCaptcha?: (options: Record<string, unknown>) => void;
+    _aliyunCaptchaInstance?: {
+      reset: () => void;
+      show: () => void;
+      hide: () => void;
+    };
     turnstile?: {
-      render: (
-        container: string | HTMLElement,
-        options: Record<string, unknown>
-      ) => string;
+      render: (container: string | HTMLElement, options: Record<string, unknown>) => string;
       reset: (widgetId: string) => void;
     };
   }
 }
 
-// Cloudflare Turnstile 官方 CDN（render=explicit：仅主动 render，避免自动扫描）
-const TURNSTILE_CDN_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
-// 单次加载超时：8 秒（快速失败，不让用户长时间转圈）
+// ============ 阿里云验证码 2.0 ============
+const ALIYUN_CAPTCHA_SDK = 'https://o.alicdn.com/captcha-frontend/aliyunCaptcha/AliyunCaptcha.js';
 const SCRIPT_TIMEOUT_MS = 8000;
-// 脚本加载后 turnstile 对象初始化的等待时间
 const INIT_WAIT_MS = 2000;
+
+export const ALIYUN_CAPTCHA_SCENE_ID = import.meta.env.VITE_ALIYUN_CAPTCHA_SCENE_ID || '5muz4qov';
+export const ALIYUN_CAPTCHA_PREFIX = import.meta.env.VITE_ALIYUN_CAPTCHA_PREFIX || '1xsr1d';
+
+export const loadTencentCaptcha = async (): Promise<boolean> => {
+  if (window.initAliyunCaptcha) return true;
+
+  return new Promise((resolve) => {
+    window.AliyunCaptchaConfig = { region: 'cn', prefix: ALIYUN_CAPTCHA_PREFIX };
+
+    if (document.querySelector('script[src*="alicdn.com/captcha-frontend"]')) {
+      const check = setInterval(() => { if (window.initAliyunCaptcha) { clearInterval(check); resolve(true); } }, 100);
+      setTimeout(() => { clearInterval(check); resolve(!!window.initAliyunCaptcha); }, 2000);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = ALIYUN_CAPTCHA_SDK;
+    script.async = true;
+
+    let settled = false;
+    const finish = (ok: boolean) => { if (settled) return; settled = true; clearTimeout(timeoutId); clearInterval(checkInterval); if (!ok) script.remove(); resolve(ok); };
+    const timeoutId = setTimeout(() => finish(!!window.initAliyunCaptcha), SCRIPT_TIMEOUT_MS);
+    const checkInterval = setInterval(() => { if (window.initAliyunCaptcha) finish(true); }, 100);
+
+    script.onload = () => { if (window.initAliyunCaptcha) finish(true); else setTimeout(() => finish(!!window.initAliyunCaptcha), INIT_WAIT_MS); };
+    script.onerror = () => finish(false);
+    document.head.appendChild(script);
+  });
+};
+
+export const getCaptchaAppId = (): string => ALIYUN_CAPTCHA_SCENE_ID;
+
+// ============ Cloudflare Turnstile（仅中间页使用）============
+const TURNSTILE_CDN_URL = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
 
 export const loadTurnstile = async (): Promise<boolean> => {
   if (window.turnstile) return true;
 
   return new Promise((resolve) => {
+    if (document.querySelector('script[src*="challenges.cloudflare.com/turnstile"]')) {
+      const check = setInterval(() => { if (window.turnstile) { clearInterval(check); resolve(true); } }, 100);
+      setTimeout(() => { clearInterval(check); resolve(!!window.turnstile); }, 2000);
+      return;
+    }
+
     const script = document.createElement('script');
     script.src = TURNSTILE_CDN_URL;
     script.async = true;
     script.defer = true;
 
     let settled = false;
-    const finish = (ok: boolean) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timeoutId);
-      clearInterval(checkInterval);
-      if (!ok) script.remove();
-      resolve(ok);
-    };
+    const finish = (ok: boolean) => { if (settled) return; settled = true; clearTimeout(timeoutId); clearInterval(checkInterval); if (!ok) script.remove(); resolve(ok); };
+    const timeoutId = setTimeout(() => finish(!!window.turnstile), 8000);
+    const checkInterval = setInterval(() => { if (window.turnstile) finish(true); }, 100);
 
-    // 单次超时：8 秒后快速失败
-    const timeoutId = setTimeout(() => {
-      finish(!!window.turnstile);
-    }, SCRIPT_TIMEOUT_MS);
-
-    // 轮询检查 turnstile 对象（脚本加载后可能需要一点时间初始化）
-    const checkInterval = setInterval(() => {
-      if (window.turnstile) finish(true);
-    }, 100);
-
-    script.onload = () => {
-      if (window.turnstile) {
-        finish(true);
-      } else {
-        // 脚本已加载，给 2 秒让 turnstile 对象初始化
-        setTimeout(() => finish(!!window.turnstile), INIT_WAIT_MS);
-      }
-    };
-
-    script.onerror = () => {
-      finish(false);
-    };
-
+    script.onload = () => { if (window.turnstile) finish(true); else setTimeout(() => finish(!!window.turnstile), 2000); };
+    script.onerror = () => finish(false);
     document.head.appendChild(script);
   });
 };

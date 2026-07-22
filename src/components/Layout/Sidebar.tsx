@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Home, CalendarDays, NotebookPen, Repeat, Heart,
-  MessageCircleHeart, User, Settings, Menu, X, Sparkles, Trash2
+  MessageCircleHeart, User, Settings, Menu, X, Sparkles, Trash2, Users, Globe, Circle
 } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 import EntertainmentSheet from '@/pages/Entertainment';
@@ -24,6 +24,9 @@ const Sidebar: React.FC = () => {
     { path: '/habits', icon: Repeat, label: '习惯' },
     { path: '/mood', icon: Heart, label: '心情' },
     { path: '/companion', icon: MessageCircleHeart, label: '暖心陪伴', highlight: true },
+    { path: '/friends', icon: Users, label: '好友' },
+    { path: '/space', icon: Globe, label: '空间' },
+    { path: '/status', icon: Circle, label: '状态' },
     { label: '娱乐', onClick: () => { setShowEntertainment(true); setMobileOpen(false); } },
     { label: '学习', onClick: () => { setShowLearning(true); setMobileOpen(false); } },
   ];

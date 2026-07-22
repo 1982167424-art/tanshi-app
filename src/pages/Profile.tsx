@@ -1,5 +1,5 @@
-import React, { useRef, useEffect } from 'react';
-import { Camera, Calendar, Hash, Clock, FileText, Repeat, Heart, MessageCircleHeart } from 'lucide-react';
+import React, { useRef, useEffect, useState } from 'react';
+import { Camera, Calendar, Hash, Clock, FileText, Repeat, Heart, MessageCircleHeart, Edit3, Check, X } from 'lucide-react';
 import GlassCard from '@/components/ui/GlassCard';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useDaysStore } from '@/store/useDaysStore';
@@ -21,6 +21,25 @@ const Profile: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { loadTitles(); }, [loadTitles]);
+
+  const [editingName, setEditingName] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [nameError, setNameError] = useState('');
+  const [savingName, setSavingName] = useState(false);
+
+  const handleSaveName = async () => {
+    if (!newUsername.trim()) { setNameError('用户名不能为空'); return; }
+    if (newUsername.trim() === currentUser?.username) { setEditingName(false); return; }
+    setSavingName(true);
+    setNameError('');
+    try {
+      await updateUser({ username: newUsername.trim() });
+      setEditingName(false);
+    } catch (e: any) {
+      setNameError(e.message || '改名失败');
+    }
+    setSavingName(false);
+  };
 
   const isTeen = currentUser?.isTeenMode;
   const daysCount = getUserDays().length;
@@ -103,9 +122,26 @@ const Profile: React.FC = () => {
           </div>
 
           <div className="text-center sm:text-left flex-1">
-            <h2 className="text-2xl font-serif font-bold text-amber-900 mb-2 dark:text-gray-100">
-              {currentUser?.username}
-            </h2>
+            {editingName ? (
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  autoFocus
+                  value={newUsername}
+                  onChange={e => { setNewUsername(e.target.value); setNameError(''); }}
+                  onKeyDown={e => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setEditingName(false); }}
+                  className="flex-1 px-3 py-1.5 rounded-lg border border-orange-300 text-lg font-serif font-bold dark:bg-[#1a1a2e]/60 dark:border-white/10 dark:text-gray-100 focus:outline-none focus:border-orange-500"
+                  maxLength={20}
+                />
+                <button onClick={handleSaveName} disabled={savingName} className="p-1.5 rounded-lg bg-green-500 text-white hover:bg-green-600"><Check size={16} /></button>
+                <button onClick={() => { setEditingName(false); setNameError(''); }} className="p-1.5 rounded-lg bg-gray-200 text-gray-600 hover:bg-gray-300"><X size={16} /></button>
+              </div>
+            ) : (
+              <h2 className="text-2xl font-serif font-bold text-amber-900 mb-2 dark:text-gray-100 flex items-center gap-2">
+                {currentUser?.username}
+                <button onClick={() => { setNewUsername(currentUser?.username || ''); setEditingName(true); }} className="p-1 rounded-lg hover:bg-orange-100 text-orange-400 dark:hover:bg-white/10"><Edit3 size={14} /></button>
+              </h2>
+            )}
+            {nameError && <p className="text-xs text-red-500 mb-2">{nameError}</p>}
             <div className="flex flex-wrap items-center justify-center sm:justify-start gap-3 mb-4">
               <span className="flex items-center gap-1.5 text-sm text-amber-600 font-serif bg-amber-50 px-3 py-1 rounded-full dark:bg-[#0f3460]/30 dark:text-gray-400">
                 <Hash size={14} /> UID: {currentUser?.uid}

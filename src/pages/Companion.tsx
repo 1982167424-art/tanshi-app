@@ -3,7 +3,7 @@ import { Plus, Trash2, Send, MessageCircleHeart, Menu, X, Smile, Frown, Meh } fr
 import GlassCard from '@/components/ui/GlassCard';
 import Button from '@/components/ui/Button';
 import { useCompanionStore } from '@/store/useCompanionStore';
-import { quickTopics } from '@/utils/aiResponse';
+import { quickTopics, getAISuggestions } from '@/utils/aiResponse';
 import { formatDateTime } from '@/utils/date';
 import { Conversation } from '@/types';
 
@@ -210,36 +210,57 @@ const Companion: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                currentConversation.messages.map((msg) => {
-                  const emotion = msg.role === 'user' ? getEmotionFromText(msg.content) : 'default';
-                  return (
-                    <div
-                      key={msg.id}
-                      className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} mb-4`}
-                    >
-                      <div className={`
-                        max-w-[80%] sm:max-w-[70%] px-4 py-3 rounded-2xl
-                        transition-all duration-300
-                        ${msg.role === 'user'
-                          ? 'bg-gradient-to-br from-orange-400 to-pink-400 text-white rounded-br-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5'
-                          : 'bg-white/90 text-orange-900 border border-orange-100 rounded-bl-sm shadow-md hover:shadow-lg hover:-translate-y-0.5 dark:bg-[#16213e]/80 dark:text-gray-100 dark:border-white/10'
-                        }
-                      `}>
-                        <p className="font-serif leading-relaxed whitespace-pre-wrap text-base">
-                          {msg.content}
-                        </p>
-                        <div className={`flex items-center justify-end gap-2 mt-2 ${msg.role === 'user' ? 'text-orange-100' : 'text-orange-400 dark:text-gray-500'}`}>
-                          <span className="text-xs">{formatDateTime(msg.createdAt)}</span>
-                          {msg.role === 'user' && (
-                            <span className={`p-1 rounded-full ${emotion === 'sad' ? 'bg-blue-200/30' : emotion === 'happy' ? 'bg-yellow-200/30' : emotion === 'angry' ? 'bg-red-200/30' : 'bg-gray-200/30'}`}>
-                              {emotionIcons[emotion]}
-                            </span>
-                          )}
+                (() => {
+                  const msgs = currentConversation.messages;
+                  const suggestions = getAISuggestions(msgs);
+                  const lastAiIdx = msgs.length - 1;
+
+                  return msgs.map((msg, idx) => {
+                    const emotion = msg.role === 'user' ? getEmotionFromText(msg.content) : 'default';
+                    const isLastAi = msg.role === 'ai' && idx === lastAiIdx && suggestions.length > 0;
+                    return (
+                      <div key={msg.id} className="mb-4">
+                        <div
+                          className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div className={`
+                            max-w-[80%] sm:max-w-[70%] px-4 py-3 rounded-2xl
+                            transition-all duration-300
+                            ${msg.role === 'user'
+                              ? 'bg-gradient-to-br from-orange-400 to-pink-400 text-white rounded-br-sm shadow-lg hover:shadow-xl hover:-translate-y-0.5'
+                              : 'bg-white/90 text-orange-900 border border-orange-100 rounded-bl-sm shadow-md hover:shadow-lg hover:-translate-y-0.5 dark:bg-[#16213e]/80 dark:text-gray-100 dark:border-white/10'
+                            }
+                          `}>
+                            <p className="font-serif leading-relaxed whitespace-pre-wrap text-base">
+                              {msg.content}
+                            </p>
+                            <div className={`flex items-center justify-end gap-2 mt-2 ${msg.role === 'user' ? 'text-orange-100' : 'text-orange-400 dark:text-gray-500'}`}>
+                              <span className="text-xs">{formatDateTime(msg.createdAt)}</span>
+                              {msg.role === 'user' && (
+                                <span className={`p-1 rounded-full ${emotion === 'sad' ? 'bg-blue-200/30' : emotion === 'happy' ? 'bg-yellow-200/30' : emotion === 'angry' ? 'bg-red-200/30' : 'bg-gray-200/30'}`}>
+                                  {emotionIcons[emotion]}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </div>
+                        {isLastAi && !isTyping && (
+                          <div className="flex flex-wrap gap-2 mt-2 ml-2 animate-fade-in">
+                            {suggestions.map((s, i) => (
+                              <button
+                                key={i}
+                                onClick={() => handleQuickTopic(s)}
+                                className="px-3 py-1.5 rounded-full bg-white/80 border border-orange-200 text-orange-600 text-xs font-serif hover:bg-orange-50 hover:border-orange-300 transition-all dark:bg-[#16213e]/60 dark:border-white/10 dark:text-gray-400 dark:hover:bg-[#0f3460]/60"
+                              >
+                                💡 {s}
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
-                    </div>
-                  );
-                })
+                    );
+                  });
+                })()
               )}
 
               {isTyping && (
@@ -287,6 +308,7 @@ const Companion: React.FC = () => {
                   <Send size={20} />
                 </button>
               </div>
+              <p className="text-center text-xs text-orange-400/60 font-serif mt-1 dark:text-gray-600">AI生成可能有误，请注意核实</p>
             </div>
           </div>
         </div>

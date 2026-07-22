@@ -1,4 +1,4 @@
-import { Day, Note, Habit, Mood, Reminder, DeletedItem, User, CheckinStatus, CheckinResult, UserTitle } from '@/types';
+import { Day, Note, Habit, Mood, Reminder, DeletedItem, User, CheckinStatus, CheckinResult, UserTitle, UserProfile, FriendRequest, Friend, Post, PostComment, Status, FriendMessage, Favorite } from '@/types';
 
 // API 基址：
 // - 本地开发：走 Vite proxy（空串 + /api → localhost:3001）
@@ -27,12 +27,14 @@ const fetchWithTimeout = async (url: string, options: RequestInit, timeoutMs = 1
 // 请求封装：自动注入JWT，统一解包 data 字段
 async function request<T = unknown>(url: string, options?: RequestInit, timeoutMs = 15000): Promise<T> {
   const token = getToken();
+  // FormData 不能手动设置 Content-Type，浏览器会自动带 multipart/form-data + boundary
+  const isFormData = options?.body instanceof FormData;
   let res: Response;
   try {
     res = await fetchWithTimeout(`${API_BASE}${url}`, {
       ...options,
       headers: {
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...options?.headers,
       },
@@ -76,16 +78,24 @@ export const api = {
 
   // 认证：返回 { user, token }
   auth: {
-    register: (username: string, password: string, birthday: string, turnstileToken?: string) =>
+    register: (username: string, password: string, birthday: string, turnstileToken?: string, turnstileRandstr?: string, phone?: string, smsCode?: string) =>
       request<{ user: User; token: string }>('/auth/register', {
         method: 'POST',
-        body: JSON.stringify({ username, password, birthday, turnstileToken }),
+        body: JSON.stringify({ username, password, birthday, turnstileToken, turnstileRandstr, phone, smsCode }),
       }),
-    login: (username: string, password: string, accessCode?: string, turnstileToken?: string) =>
+    login: (username: string, password: string, accessCode?: string, turnstileToken?: string, turnstileRandstr?: string) =>
       request<{ user: User; token: string }>('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ username, password, accessCode, turnstileToken }),
+        body: JSON.stringify({ username, password, accessCode, turnstileToken, turnstileRandstr }),
       }),
+  },
+
+  // 验证码
+  verify: {
+    sendSms: (phone: string) =>
+      request('/verify/sms/send', { method: 'POST', body: JSON.stringify({ phone }) }),
+    verifySms: (phone: string, code: string) =>
+      request('/verify/sms/verify', { method: 'POST', body: JSON.stringify({ phone, code }) }),
   },
 
   // 用户
@@ -208,5 +218,124 @@ export const api = {
     getStatus: () => request<CheckinStatus>('/checkin/status'),
     checkin: () => request<CheckinResult>('/checkin', { method: 'POST' }),
     getTitles: () => request<{ titles: UserTitle[] }>('/checkin/titles').then(d => d.titles),
+  },
+
+  // 好友系统
+  friends: {
+    search: (q: string, by: string = 'uid') =>
+      request<{ users: UserProfile[] }>(`/friends/search?q=${encodeURIComponent(q)}&by=${by}`).then(d => d.users),
+    getProfile: (uid: string) =>
+      request<{ profile: UserProfile; isFriend: boolean }>(`/friends/profile/${uid}`),
+    sendRequest: (toUid: string, reason?: string, permission?: string) =>
+      request<{ autoAccepted?: boolean; requestId?: string }>('/friends/request', {
+        method: 'POST',
+        body: JSON.stringify({ toUid, reason: reason || '', permission: permission || 'chat_only' }),
+      }),
+    getReceivedRequests: () =>
+      request<{ requests: FriendRequest[] }>('/friends/requests/received').then(d => d.requests),
+    getSentRequests: () =>
+      request<{ requests: FriendRequest[] }>('/friends/requests/sent').then(d => d.requests),
+    replyRequest: (id: string, reply: string) =>
+      request(`/friends/requests/${id}/reply`, { method: 'POST', body: JSON.stringify({ reply }) }),
+    acceptRequest: (id: string, permission?: string) =>
+      request(`/friends/requests/${id}/accept`, { method: 'POST', body: JSON.stringify({ permission: permission || 'chat_only' }) }),
+    rejectRequest: (id: string) =>
+      request(`/friends/requests/${id}/reject`, { method: 'POST' }),
+    getAll: () =>
+      request<{ friends: Friend[] }>('/friends').then(d => d.friends),
+    remove: (uid: string) =>
+      request(`/friends/${uid}`, { method: 'DELETE' }),
+    updatePermission: (uid: string, permission: string) =>
+      request(`/friends/${uid}/permission`, { method: 'PUT', body: JSON.stringify({ permission }) }),
+    getUnread: () =>
+      request<{ count: number }>('/friends/unread').then(d => d.count),
+    block: (uid: string) =>
+      request(`/friends/block/${uid}`, { method: 'POST' }),
+    unblock: (uid: string) =>
+      request(`/friends/block/${uid}`, { method: 'DELETE' }),
+    getBlocklist: () =>
+      request<{ list: Array<{ blocked_uid: string; username: string; avatar: string; created_at: string }> }>('/friends/blocklist').then(d => d.list),
+  },
+
+  // 空间（朋友圈）
+  posts: {
+    create: (formData: FormData) =>
+      request<{ post: Post }>('/posts', {
+        method: 'POST',
+        body: formData,
+        headers: {}, // 让浏览器自动设置 Content-Type（含 boundary）
+      }).then(d => d.post),
+    getFeed: (page = 1) =>
+      request<{ posts: Post[] }>(`/posts/feed?page=${page}`).then(d => d.posts),
+    getUserPosts: (uid: string, page = 1) =>
+      request<{ posts: Post[] }>(`/posts/user/${uid}?page=${page}`).then(d => d.posts),
+    delete: (id: string) =>
+      request(`/posts/${id}`, { method: 'DELETE' }),
+    like: (id: string) =>
+      request<{ liked: boolean }>(`/posts/${id}/like`, { method: 'POST' }),
+    getComments: (id: string, page = 1) =>
+      request<{ comments: PostComment[] }>(`/posts/${id}/comments?page=${page}`).then(d => d.comments),
+    addComment: (id: string, content: string) =>
+      request<{ comment: PostComment }>(`/posts/${id}/comments`, {
+        method: 'POST',
+        body: JSON.stringify({ content }),
+      }).then(d => d.comment),
+    deleteComment: (id: string) =>
+      request(`/posts/comments/${id}`, { method: 'DELETE' }),
+  },
+
+  // 状态
+  statuses: {
+    create: (content: string, emoji?: string, background?: string) =>
+      request<{ status: Status }>('/statuses', {
+        method: 'POST',
+        body: JSON.stringify({ content, emoji, background }),
+      }).then(d => d.status),
+    getFriends: () =>
+      request<{ statuses: Status[] }>('/statuses/friends').then(d => d.statuses),
+    getUserStatuses: (uid: string) =>
+      request<{ statuses: Status[] }>(`/statuses/user/${uid}`).then(d => d.statuses),
+    delete: (id: string) =>
+      request(`/statuses/${id}`, { method: 'DELETE' }),
+  },
+
+  // 好友私聊
+  messages: {
+    getChatList: () =>
+      request<{ list: Array<{ friend_uid: string; username: string; avatar: string; lastMessage: string; lastMsgType: string; lastMessageAt: string }> }>('/messages').then(d => d.list),
+    getMessages: (friendUid: string, page = 1) =>
+      request<{ messages: FriendMessage[] }>(`/messages/${friendUid}?page=${page}`).then(d => d.messages),
+    send: (toUid: string, content: string, msgType?: string, extra?: string, file?: File) => {
+      if (file) {
+        const formData = new FormData();
+        formData.append('toUid', toUid);
+        formData.append('content', content);
+        if (msgType) formData.append('msgType', msgType);
+        if (extra) formData.append('extra', extra);
+        formData.append('file', file);
+        return request<{ message: FriendMessage }>('/messages', {
+          method: 'POST',
+          body: formData,
+          headers: {},
+        });
+      }
+      return request<{ message: FriendMessage }>('/messages', {
+        method: 'POST',
+        body: JSON.stringify({ toUid, content, msgType: msgType || 'text', extra: extra || '{}' }),
+      });
+    },
+  },
+
+  // 收藏
+  favorites: {
+    add: (favType: string, favId: string, title?: string, subtitle?: string, url?: string, icon?: string) =>
+      request<{ favorite: Favorite }>('/favorites', {
+        method: 'POST',
+        body: JSON.stringify({ favType, favId, title, subtitle, url, icon }),
+      }),
+    remove: (favType: string, favId: string) =>
+      request(`/favorites/${favType}/${favId}`, { method: 'DELETE' }),
+    getAll: (type?: string) =>
+      request<{ favorites: Favorite[] }>(`/favorites${type ? `?type=${type}` : ''}`).then(d => d.favorites),
   },
 };
