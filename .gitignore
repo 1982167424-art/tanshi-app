@@ -25,3 +25,13 @@ backend/.env
 未命名文件夹/
 1.docx
 demo.html
+
+# Android 构建产物
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+android/app/release/
+android/app/src/main/assets/public/
+*.keystore
+*.jks
