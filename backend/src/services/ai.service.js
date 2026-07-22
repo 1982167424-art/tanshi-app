@@ -1,18 +1,22 @@
-const POLLINATIONS_API_URL = 'https://text.pollinations.ai/openai';
-const POLLINATIONS_MODEL = 'openai';
+const AI_TOOLS_API_URL = 'https://platform.aitools.cfd/api/v1/chat/completions';
+const AI_TOOLS_KEY = process.env.AI_TOOLS_API_KEY || 'sk-4ea6c0ed7461427ea7cafb0127c365e7';
+const AI_TOOLS_MODEL = 'openai/gpt-oss-20b';
 
 // 带重试的 AI 调用
-const callMimo = async (systemPrompt, userPrompt, { temperature = 0.8, maxTokens = 200, retries = 2 } = {}) => {
+const callAI = async (systemPrompt, userPrompt, { temperature = 0.8, maxTokens = 200, retries = 2 } = {}) => {
   for (let i = 0; i <= retries; i++) {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30000);
 
-      const response = await fetch(POLLINATIONS_API_URL, {
+      const response = await fetch(AI_TOOLS_API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${AI_TOOLS_KEY}`,
+        },
         body: JSON.stringify({
-          model: POLLINATIONS_MODEL,
+          model: AI_TOOLS_MODEL,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
@@ -27,12 +31,12 @@ const callMimo = async (systemPrompt, userPrompt, { temperature = 0.8, maxTokens
 
       if (!response.ok) throw new Error(`AI服务返回 ${response.status}`);
       const data = await response.json();
-      const content = data.choices?.[0]?.message?.content;
+      const message = data.choices?.[0]?.message;
+      const content = message?.content || message?.reasoning || '';
       if (!content) throw new Error('AI返回内容为空');
       return content;
     } catch (error) {
       if (i === retries) throw error;
-      // 等待后重试
       await new Promise(r => setTimeout(r, 1000 * (i + 1)));
     }
   }
@@ -51,9 +55,10 @@ const chat = async (message) => {
 4. 关注用户的情绪变化，给予积极的回应
 5. 保持简洁，回复一般不超过100字
 6. 如果用户表达了负面情绪，给予安慰和理解
-7. 用中文回复，保持温暖治愈的风格`;
+7. 用中文回复，保持温暖治愈的风格
+8. 直接回复用户的问题，不要复述用户的话`;
 
-  const content = await callMimo(systemPrompt, message, { temperature: 0.8, maxTokens: 200 });
+  const content = await callAI(systemPrompt, message, { temperature: 0.8, maxTokens: 200 });
   return content || '我听到了，能再说详细一点吗？';
 };
 
@@ -80,7 +85,7 @@ const analysis = async (moodData) => {
   let analysisResult = { summary: '', suggestion: '', encouragement: '' };
 
   try {
-    const aiResponse = await callMimo(systemPrompt, userPrompt, { temperature: 0.7, maxTokens: 300 });
+    const aiResponse = await callAI(systemPrompt, userPrompt, { temperature: 0.7, maxTokens: 300 });
     const match = aiResponse.match(/\{[\s\S]*\}/);
     if (match) analysisResult = JSON.parse(match[0]);
   } catch {

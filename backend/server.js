@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -12,7 +13,7 @@ require('./src/models/init').initDatabase();
 const routes = require('./src/routes');
 const logger = require('./src/middleware/logger');
 const errorHandler = require('./src/middleware/errorHandler');
-const { checkHeaders, jsonDepthLimit, paramCountLimit, requestTimeout, bodySizeLimit } = require('./src/middleware/security');
+const { checkHeaders, jsonDepthLimit, paramCountLimit, requestTimeout, bodySizeLimit, checkIpAbuse } = require('./src/middleware/security');
 const { originVerification, preventUidEnumeration, checkAbnormalTraffic } = require('./src/middleware/securityAdvanced');
 const db = require('./src/models/database');
 
@@ -44,14 +45,14 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "https://challenges.cloudflare.com"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://challenges.cloudflare.com", "https://g.alicdn.com", "https://o.alicdn.com", "https://static.cloudflareinsights.com"],
       styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "blob:"],
-      connectSrc: ["'self'", "https://api.textime.top", "https://challenges.cloudflare.com"],
+      imgSrc: ["'self'", "data:", "blob:", "https://g.alicdn.com", "https://o.alicdn.com"],
+      connectSrc: ["'self'", "https://api.textime.top", "https://challenges.cloudflare.com", "https://g.alicdn.com", "https://o.alicdn.com", "https://captcha.cn-hangzhou.aliyuncs.com"],
       fontSrc: ["'self'"],
       objectSrc: ["'none'"],
       mediaSrc: ["'self'"],
-      frameSrc: ["https://challenges.cloudflare.com"],
+      frameSrc: ["https://challenges.cloudflare.com", "https://g.alicdn.com", "https://o.alicdn.com"],
     },
   },
   crossOriginEmbedderPolicy: false,
@@ -79,20 +80,27 @@ app.use((req, res, next) => {
 // ============ 请求超时（慢速攻击防护，10秒）============
 app.use(requestTimeout(10000));
 
-// ============ CORS 配置（严格白名单）============
+// ============ CORS 配置（严格白名单 + 开发环境）============
 // 必须放在限流器之前：浏览器预检 OPTIONS 和 429 响应都需要带 CORS 头。
 const ALLOWED_ORIGINS = [
   'https://textime.top',
   'https://www.textime.top',
   'https://exteenfit.vercel.app',
 ];
+const isDev = process.env.NODE_ENV !== 'production';
 const corsOptions = {
   origin: (origin, callback) => {
+    // 无 origin（同域请求/脚本加载/direct调用）或在生产白名单内 → 放行
     if (!origin || ALLOWED_ORIGINS.includes(origin)) {
       callback(null, true);
-    } else {
-      callback(null, false);
+      return;
     }
+    // 开发环境允许 localhost
+    if (isDev && /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
@@ -101,11 +109,11 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.options('/api/*', cors(corsOptions));
 
-// ============ 速率限制（收紧阈值）============
-// 全局限制：每IP每分钟30次
+// ============ 速率限制（DDoS 加固版）============
+// 全局基础限制：每IP每分钟60次（允许多页面并行请求）
 const limiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 30,
+  max: 60,
   keyGenerator: (req) => getClientIp(req),
   skip: (req) => req.method === 'OPTIONS',
   message: { success: false, message: '请求过于频繁，请稍后再试' },
@@ -114,10 +122,10 @@ const limiter = rateLimit({
 });
 app.use('/api', limiter);
 
-// 认证接口限制（防暴力破解）：每IP每15分钟20次
+// 认证接口限制（防暴力破解）：每IP每15分钟5次（从20降到5）
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: 5,
   keyGenerator: (req) => getClientIp(req),
   skip: (req) => req.method === 'OPTIONS',
   message: { success: false, message: '登录/注册请求过于频繁，请15分钟后再试' },
@@ -125,22 +133,21 @@ const authLimiter = rateLimit({
 });
 app.use('/api/auth', authLimiter);
 
-// AI 接口限制：每IP每分钟5次
+// AI 接口限制：每IP每分钟3次（从5降到3）
 const aiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 5,
+  max: 3,
   keyGenerator: (req) => getClientIp(req),
   skip: (req) => req.method === 'OPTIONS',
   message: { success: false, message: 'AI请求过于频繁，请稍后再试' },
 });
 app.use('/api/ai', aiLimiter);
 
-// 敏感操作限制：每IP每小时3次
+// 敏感操作限制：每IP每小时2次（从3降到2）
 const sensitiveLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  max: 3,
+  max: 2,
   keyGenerator: (req) => getClientIp(req),
-  // GET（同步用户信息）不消耗敏感操作配额，只限 PUT/DELETE
   skip: (req) => req.method === 'OPTIONS' || req.method === 'GET',
   message: { success: false, message: '操作过于频繁，请1小时后再试' },
 });
@@ -148,16 +155,9 @@ app.use('/api/users', sensitiveLimiter);
 
 // ============ JSON 解析（限制大小 + 错误处理）============
 app.use(express.json({
-  limit: '100kb',
+  limit: '10mb',
   verify: (req, res, buf) => {
-    // 跳过无 body 的请求（GET/DELETE/空body POST）
     if (buf.length === 0) return;
-    try {
-      JSON.parse(buf);
-    } catch {
-      res.status(400).json({ success: false, message: '请求格式错误' });
-      throw new Error('Invalid JSON');
-    }
   },
 }));
 
@@ -170,10 +170,11 @@ app.use((err, req, res, next) => {
 });
 
 // ============ 安全中间件 ============
+app.use(checkIpAbuse);          // IP 滥用检测（DDoS 防护）
 app.use(checkAbnormalTraffic);  // 异常流量检测
 app.use(originVerification);    // Origin 校验
 app.use(checkHeaders);          // 请求头检查
-app.use(bodySizeLimit(100 * 1024));  // 请求体大小限制
+app.use(bodySizeLimit(10 * 1024 * 1024));  // 请求体大小限制（10MB，支持图片上传）
 app.use(jsonDepthLimit);        // JSON 深度限制
 app.use(paramCountLimit);       // 参数数量限制
 app.use(preventUidEnumeration); // 用户ID防枚举
@@ -199,6 +200,12 @@ app.get('/api/turnstile/script', async (req, res) => {
     res.status(502).send('// Turnstile script proxy failed');
   }
 });
+
+// ============ 静态文件：上传的图片/视频 ============
+const uploadsDir = process.env.RAILWAY_VOLUME_MOUNT_PATH
+  ? path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, 'uploads')
+  : path.join(__dirname, 'uploads');
+app.use('/api/uploads', express.static(uploadsDir, { maxAge: '30d' }));
 
 // ============ 业务路由 ============
 app.use('/api', routes);
@@ -368,12 +375,13 @@ ${userCards}
 </div>
 <button class="refresh-btn" onclick="location.reload()">🔄 刷新</button>
 <script>
+const ADMIN_KEY = '${escapeHtml(adminKey)}';
 document.querySelectorAll('.delete-btn').forEach(btn => {
   btn.addEventListener('click', async function() {
     const uid = this.dataset.uid;
     if(!confirm('确定删除该用户及所有数据？此操作不可恢复！'))return;
     try{
-      const r=await fetch('/api/admin/users/'+uid,{method:'DELETE',headers:{'X-Admin-Key':new URLSearchParams(window.location.search).get('code')||''}});
+      const r=await fetch('/api/admin/users/'+uid,{method:'DELETE',headers:{'X-Admin-Key':ADMIN_KEY}});
       const d=await r.json();
       if(d.success){alert('已删除');location.reload();}
       else alert('失败：'+d.message);
@@ -444,6 +452,18 @@ const purgeExpiredTrash = () => {
   }
 };
 
+// 清理过期验证码
+const purgeExpiredVerifyCodes = () => {
+  try {
+    const result = db.prepare("DELETE FROM verify_codes WHERE expires_at <= datetime('now')").run();
+    if (result.changes > 0) {
+      console.log(`🔑 验证码清理: 删除了 ${result.changes} 条过期验证码`);
+    }
+  } catch (err) {
+    console.error('验证码清理失败:', err.message);
+  }
+};
+
 // 计算距离下一个凌晨3点的毫秒数
 const getMsUntil3AM = () => {
   const now = new Date();
@@ -456,7 +476,11 @@ const getMsUntil3AM = () => {
 // 首次延迟到凌晨3点执行，之后每24小时执行一次
 setTimeout(() => {
   purgeExpiredTrash();
-  setInterval(purgeExpiredTrash, 24 * 60 * 60 * 1000);
+  purgeExpiredVerifyCodes();
+  setInterval(() => {
+    purgeExpiredTrash();
+    purgeExpiredVerifyCodes();
+  }, 24 * 60 * 60 * 1000);
 }, getMsUntil3AM());
 console.log(`⏰ 回收站定时清理已启用: 每天凌晨3点自动清理${TRASH_EXPIRE_DAYS}天前的过期数据`);
 

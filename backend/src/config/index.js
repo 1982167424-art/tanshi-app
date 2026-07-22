@@ -24,6 +24,15 @@ const config = {
     apiUrl: 'https://text.pollinations.ai/openai',
     model: 'openai',
   },
+
+  oauth: {
+    wechat: {
+      clientId: process.env.WECHAT_CLIENT_ID,
+      clientSecret: process.env.WECHAT_CLIENT_SECRET,
+    },
+    redirectBase: process.env.OAUTH_REDIRECT_BASE || 'https://api.textime.top',
+    frontendBase: process.env.OAUTH_FRONTEND_BASE || 'https://textime.top',
+  },
 };
 
 // 启动时校验必要环境变量

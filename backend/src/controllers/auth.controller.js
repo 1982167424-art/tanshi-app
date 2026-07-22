@@ -19,12 +19,27 @@ const getIp = (req) => {
 
 const register = async (req, res, next) => {
   try {
-    const { username, password, birthday, turnstileToken } = req.body;
-    // Turnstile 可选：有 token 则验证，验证失败降级放行（国内代理模式下 token 可能异常）
+    const { username, password, birthday, phone, smsCode, turnstileToken, turnstileRandstr } = req.body;
+    // 验证码可选：有 token 则验证，验证失败降级放行
     if (turnstileToken) {
-      const tr = await verifyTurnstileToken(turnstileToken);
-      if (!tr.valid) console.warn(`[Turnstile] 注册验证降级放行: ${tr.message}`, tr.errors || '');
+      const ip = getIp(req);
+      const tr = await verifyTurnstileToken(turnstileToken, turnstileRandstr, ip);
+      if (!tr.valid) console.warn(`[CAPTCHA] 注册验证降级放行: ${tr.message}`);
     }
+
+    // 手机号+短信验证码必填
+    if (!phone) return fail(res, '请输入手机号');
+    if (!smsCode) return fail(res, '请输入验证码');
+    if (!/^1[3-9]\d{9}$/.test(phone)) return fail(res, '手机号格式不正确');
+
+    // 手机号必须已通过验证（前端会在输入验证码时调用 /verify/sms/verify 验证）
+    // 检查该手机号是否有已验证且未过期的验证码记录
+    const { verifySmsCode } = require('../services/verify.service');
+    const validCode = db.prepare(
+      "SELECT id FROM verify_codes WHERE target = ? AND type = 'register' AND used = 1 AND expires_at > datetime('now') ORDER BY created_at DESC LIMIT 1"
+    ).get(phone);
+    if (!validCode) return fail(res, '请先验证手机号');
+    // 用 verify_codes 表检查手机号是否已绑定用户（暂不检查，因为手机号可以多账号）
 
     // 同一 IP 只能注册一个账号
     const ip = getIp(req);
@@ -44,11 +59,12 @@ const register = async (req, res, next) => {
 
 const login = async (req, res, next) => {
   try {
-    const { username, password, accessCode, turnstileToken } = req.body;
-    // Turnstile 可选：有 token 则验证，验证失败降级放行（国内代理模式下 token 可能异常）
+    const { username, password, accessCode, turnstileToken, turnstileRandstr } = req.body;
+    // 验证码可选：有 token 则验证，验证失败降级放行
     if (turnstileToken) {
-      const tr = await verifyTurnstileToken(turnstileToken);
-      if (!tr.valid) console.warn(`[Turnstile] 登录验证降级放行: ${tr.message}`, tr.errors || '');
+      const ip = getIp(req);
+      const tr = await verifyTurnstileToken(turnstileToken, turnstileRandstr, ip);
+      if (!tr.valid) console.warn(`[CAPTCHA] 登录验证降级放行: ${tr.message}`);
     }
 
     const user = await authService.loginUser(username, password, accessCode);

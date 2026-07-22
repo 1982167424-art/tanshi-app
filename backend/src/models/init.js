@@ -149,12 +149,164 @@ function initDatabase() {
     );
   `);
 
+  // ============ 好友关系表 ============
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS friends (
+      id TEXT PRIMARY KEY,
+      user_uid TEXT NOT NULL,
+      friend_uid TEXT NOT NULL,
+      permission TEXT DEFAULT 'chat_only',
+      created_at TEXT NOT NULL,
+      UNIQUE(user_uid, friend_uid)
+    );
+  `);
+
+  // ============ 好友申请表 ============
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS friend_requests (
+      id TEXT PRIMARY KEY,
+      from_uid TEXT NOT NULL,
+      to_uid TEXT NOT NULL,
+      reason TEXT DEFAULT '',
+      reply TEXT DEFAULT '',
+      permission TEXT DEFAULT 'chat_only',
+      status TEXT DEFAULT 'pending',
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  // ============ 隐私设置表 ============
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS privacy_settings (
+      user_uid TEXT PRIMARY KEY,
+      show_exercise INTEGER DEFAULT 1,
+      show_space INTEGER DEFAULT 1,
+      show_status INTEGER DEFAULT 1,
+      block_exercise TEXT DEFAULT '[]',
+      block_space TEXT DEFAULT '[]',
+      block_status TEXT DEFAULT '[]'
+    );
+  `);
+
+  // ============ 验证码表 ============
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS verify_codes (
+      id TEXT PRIMARY KEY,
+      target TEXT NOT NULL,
+      code TEXT NOT NULL,
+      type TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+  `);
+
+  // ============ 空间（朋友圈）帖子表 ============
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS posts (
+      id TEXT PRIMARY KEY,
+      user_uid TEXT NOT NULL,
+      content TEXT NOT NULL,
+      images TEXT DEFAULT '[]',
+      video TEXT DEFAULT '',
+      visibility TEXT DEFAULT 'friends',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (user_uid) REFERENCES users(uid) ON DELETE CASCADE
+    );
+  `);
+
+  // ============ 帖子评论表 ============
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS post_comments (
+      id TEXT PRIMARY KEY,
+      post_id TEXT NOT NULL,
+      user_uid TEXT NOT NULL,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_uid) REFERENCES users(uid) ON DELETE CASCADE
+    );
+  `);
+
+  // ============ 帖子点赞表 ============
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS post_likes (
+      post_id TEXT NOT NULL,
+      user_uid TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (post_id, user_uid),
+      FOREIGN KEY (post_id) REFERENCES posts(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_uid) REFERENCES users(uid) ON DELETE CASCADE
+    );
+  `);
+
+  // ============ 状态表（微信状态） ============
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS statuses (
+      id TEXT PRIMARY KEY,
+      user_uid TEXT NOT NULL,
+      content TEXT NOT NULL,
+      emoji TEXT DEFAULT '',
+      background TEXT DEFAULT '',
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (user_uid) REFERENCES users(uid) ON DELETE CASCADE
+    );
+  `);
+
+  // ============ 好友私聊消息表 ============
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS friend_messages (
+      id TEXT PRIMARY KEY,
+      from_uid TEXT NOT NULL,
+      to_uid TEXT NOT NULL,
+      content TEXT NOT NULL,
+      msg_type TEXT DEFAULT 'text',
+      extra TEXT DEFAULT '{}',
+      created_at TEXT NOT NULL,
+      FOREIGN KEY (from_uid) REFERENCES users(uid) ON DELETE CASCADE,
+      FOREIGN KEY (to_uid) REFERENCES users(uid) ON DELETE CASCADE
+    );
+  `);
+
+  // ============ 收藏表 ============
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS favorites (
+      id TEXT PRIMARY KEY,
+      user_uid TEXT NOT NULL,
+      fav_type TEXT NOT NULL,
+      fav_id TEXT NOT NULL,
+      title TEXT DEFAULT '',
+      subtitle TEXT DEFAULT '',
+      url TEXT DEFAULT '',
+      icon TEXT DEFAULT '',
+      created_at TEXT NOT NULL,
+      UNIQUE(user_uid, fav_type, fav_id)
+    );
+  `);
+
+  // ============ 黑名单表 ============
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS blocklist (
+      user_uid TEXT NOT NULL,
+      blocked_uid TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (user_uid, blocked_uid)
+    );
+  `);
+
   // ============ 数据库迁移 ============
   migrateColumn('moods', 'created_at', 'TEXT');
   migrateColumn('reminders', 'created_at', 'TEXT');
   migrateColumn('users', 'access_code', 'TEXT');
   migrateColumn('users', 'points', 'INTEGER DEFAULT 0');
   migrateColumn('users', 'total_checkin_days', 'INTEGER DEFAULT 0');
+  migrateColumn('users', 'oauth_provider', 'TEXT');
+  migrateColumn('users', 'oauth_id', 'TEXT');
+  migrateColumn('users', 'oauth_email', 'TEXT');
+  migrateColumn('friend_messages', 'msg_type', "TEXT DEFAULT 'text'");
+  migrateColumn('friend_messages', 'extra', "TEXT DEFAULT '{}'");
 
   console.log('✅ 数据库表初始化完成');
 }

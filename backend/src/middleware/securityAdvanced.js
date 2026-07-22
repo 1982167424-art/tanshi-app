@@ -15,8 +15,8 @@ const originVerification = (req, res, next) => {
     'localhost',
   ];
 
-  // 健康检查和 Turnstile 代理允许所有来源
-  if (req.path === '/api/health' || req.path.startsWith('/api/turnstile')) {
+  // 健康检查、Turnstile 代理、管理后台允许所有来源
+  if (req.path === '/api/health' || req.path.startsWith('/api/turnstile') || req.path.startsWith('/api/admin') || req.path === '/') {
     return next();
   }
 
@@ -54,7 +54,7 @@ const verifyApiKey = (key) => {
 };
 
 // ============ 6. 用户 ID 防枚举 ============
-const uidPattern = /^TS[A-Z0-9]{8,12}$/;
+const uidPattern = /^TS[A-Z0-9]{8,20}$/;
 const preventUidEnumeration = (req, res, next) => {
   const uid = req.params.uid;
   if (uid && !uidPattern.test(uid)) {
