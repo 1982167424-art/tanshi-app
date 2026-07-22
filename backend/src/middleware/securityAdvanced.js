@@ -15,8 +15,8 @@ const originVerification = (req, res, next) => {
     'localhost',
   ];
 
-  // 健康检查、Turnstile 代理、管理后台允许所有来源
-  if (req.path === '/api/health' || req.path.startsWith('/api/turnstile') || req.path.startsWith('/api/admin') || req.path === '/') {
+  // 健康检查、Turnstile 代理、管理后台、上传文件（随机文件名不可枚举）允许所有来源
+  if (req.path === '/api/health' || req.path.startsWith('/api/turnstile') || req.path.startsWith('/api/admin') || req.path.startsWith('/api/uploads') || req.path === '/') {
     return next();
   }
 

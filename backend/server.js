@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -205,7 +206,28 @@ app.get('/api/turnstile/script', async (req, res) => {
 const uploadsDir = process.env.RAILWAY_VOLUME_MOUNT_PATH
   ? path.join(process.env.RAILWAY_VOLUME_MOUNT_PATH, 'uploads')
   : path.join(__dirname, 'uploads');
-app.use('/api/uploads', express.static(uploadsDir, { maxAge: '30d' }));
+// 允许跨源加载（前端 textime.top 加载 api.textime.top 的图片/视频；
+// helmet 默认 CORP: same-origin 会导致浏览器拦截渲染）
+app.use('/api/uploads', (req, res, next) => {
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+}, express.static(uploadsDir, { maxAge: '30d' }));
+
+// 诊断端点：查看 uploads 目录内容（需 Admin-Key）
+app.get('/api/admin/uploads-list', (req, res) => {
+  if (req.headers['x-admin-key'] !== config.adminKey) {
+    return res.status(403).json({ success: false, message: '无权限' });
+  }
+  try {
+    const files = fs.readdirSync(uploadsDir).map(name => {
+      const stat = fs.statSync(path.join(uploadsDir, name));
+      return { name, size: stat.size, mtime: stat.mtime };
+    }).sort((a, b) => b.mtime - a.mtime).slice(0, 30);
+    res.json({ success: true, data: { uploadsDir, volumePath: process.env.RAILWAY_VOLUME_MOUNT_PATH || null, total: files.length, files } });
+  } catch (e) {
+    res.json({ success: false, message: e.message, data: { uploadsDir, volumePath: process.env.RAILWAY_VOLUME_MOUNT_PATH || null } });
+  }
+});
 
 // ============ 业务路由 ============
 app.use('/api', routes);
